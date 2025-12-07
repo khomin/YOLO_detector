@@ -8,3 +8,4 @@ models/*.*
 python/__pycache__/*.*
 
 cpp/build-cpp-64bit-Debug/*.*
+cpp/CMakeLists.txt.user
