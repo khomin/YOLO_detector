@@ -8,5 +8,5 @@ models/*.*
 python/__pycache__/*.*
 
 cpp/build-cpp-64bit-Debug/*.*
-cpp/build_linux_x86/*.*
 cpp/CMakeLists.txt.user
+.lib_pack/opencv/*.*
