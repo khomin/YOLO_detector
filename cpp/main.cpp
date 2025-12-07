@@ -84,7 +84,6 @@ void load_class_names(const std::string& path) {
 }
 
 void process_predictions(cv::Mat& frame, const std::vector<cv::Mat>& outs) {
-    int64 start = cv::getTickCount();
     cv::Mat det_output(preds.size[1], preds.size[2], CV_32F, preds.ptr<float>());
 
     float confidence_threshold = 0.5;
