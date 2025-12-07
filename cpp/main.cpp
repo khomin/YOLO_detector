@@ -17,19 +17,19 @@ std::vector<std::string> class_names;
 
 // --- Function Prototypes ---
 void load_class_names(const std::string& path);
-void process_predictions(cv::Mat& frame, const std::vector<cv::Mat>& outs);
+void process_predictions(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors, int64& time_start);
 
 // --------------------------- MAIN FUNCTION -----------------------------
 int main() {
     // 1. Load Class Names
-    load_class_names("coco.names");
+    load_class_names("../../resources/coco.names");
     if (class_names.empty()) {
         std::cerr << "ERROR: Could not load class names from coco.names!" << std::endl;
         return -1;
     }
 
     // 2. Load ONNX Model
-    std::string module_path = "/home/khomin/Documents/PROJECTS/YOLO_detector/models/yolov5n.onnx";
+    std::string module_path = "../../resources/yolov5n.onnx";
     cv::dnn::Net net = cv::dnn::readNetFromONNX(module_path);
     if (net.empty()) {
         std::cerr << "ERROR: Failed to load ONNX model!" << std::endl;
@@ -51,7 +51,15 @@ int main() {
     cv::Mat frame;
     std::vector<cv::Mat> outs;
 
+    std::vector<cv::Scalar> colors;
+    colors.push_back(cv::Scalar(0, 255, 0));
+    colors.push_back(cv::Scalar(0, 255, 255));
+    colors.push_back(cv::Scalar(255, 255, 0));
+    colors.push_back(cv::Scalar(255, 0, 0));
+    colors.push_back(cv::Scalar(0, 0, 255));
+
     while (cap.read(frame) && cv::waitKey(1) < 0) {
+        int64 time_start = cv::getTickCount();
         // --- Pre-processing (Image to Blob) ---
         cv::Mat blob;
         cv::dnn::blobFromImage(frame, blob, 1/255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
@@ -61,7 +69,7 @@ int main() {
         net.forward(outs, net.getUnconnectedOutLayersNames());
 
         // --- Post-processing (NMS and Drawing) ---
-        process_predictions(frame, outs);
+        process_predictions(frame, outs[0], colors, time_start);
 
         // --- Display ---
         imshow("YOLOv5 C++ Detection (ThinkPad T14)", frame);
@@ -83,8 +91,9 @@ void load_class_names(const std::string& path) {
     }
 }
 
-void process_predictions(cv::Mat& frame, const std::vector<cv::Mat>& outs) {
-    cv::Mat det_output(preds.size[1], preds.size[2], CV_32F, preds.ptr<float>());
+void process_predictions(cv::Mat& frame, cv::Mat& outs,
+                         const std::vector<cv::Scalar>& colors, int64& time_start) {
+    cv::Mat det_output(outs.size[1], outs.size[2], CV_32F, outs.ptr<float>());
 
     float confidence_threshold = 0.5;
     std::vector<cv::Rect> boxes;
@@ -96,14 +105,14 @@ void process_predictions(cv::Mat& frame, const std::vector<cv::Mat>& outs) {
         if (confidence < 0.25) {
             continue;
         }
-        cv::Mat classes_scores = det_output.row(i).colRange(5, preds.size[2]);
+        cv::Mat classes_scores = det_output.row(i).colRange(5, outs.size[2]);
         cv::Point class_id_point;
         double score;
         minMaxLoc(classes_scores, 0, &score, 0, &class_id_point);
 
         if (score > 0.25) {
-            float x_factor = image.cols / 640.0f;
-            float y_factor = image.rows / 640.0f;
+            float x_factor = frame.cols / 640.0f;
+            float y_factor = frame.rows / 640.0f;
             float cx = det_output.at<float>(i, 0);
             float cy = det_output.at<float>(i, 1);
             float ow = det_output.at<float>(i, 2);
@@ -148,94 +157,7 @@ void process_predictions(cv::Mat& frame, const std::vector<cv::Mat>& outs) {
         std::cout << "Detected: " << class_names[idx] << ", Confidence: " << confidence << std::endl;
     }
 
-    float t = (cv::getTickCount() - start) / static_cast<float>(cv::getTickFrequency());
+    float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
 
-    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t),
-                cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
-
-//    std::vector<int> classIds;
-//    std::vector<float> confidences;
-//    std::vector<cv::Rect> boxes;
-
-//    // YOLOv5 output is a single tensor: [1, 25200, 85] -> Reshaped to rows x cols
-//    const int rows = outs[0].size[1]; // Typically 25200 (number of candidate boxes)
-//    const int cols = outs[0].size[2]; // 85 (5 box attributes + 80 classes)
-
-//    // The entire output array is a single continuous memory block
-//    float* data = (float*)outs[0].data;
-
-//    // Scaling factors to map 640x640 prediction back to original image size
-//    float x_factor = frame.cols / INPUT_WIDTH;
-//    float y_factor = frame.rows / INPUT_HEIGHT;
-
-//    const int num_classes = class_names.size(); // 80
-//    const int row_size = 5 + num_classes; // 85
-
-//    // Loop through all candidate prediction rows
-//    for (int r = 0; r < outs[0].size[1]; ++r) {
-//        // --- 1. Get Global Confidence ---
-//        float box_confidence = data[r * row_size + 4]; // Confidence is at index 4
-
-//        if (box_confidence >= CONF_THRESHOLD) {
-
-//            // --- 2. Extract Class Scores (The Fix!) ---
-//            // Create a Mat header pointing *only* to the class score data (80 values)
-//            cv::Mat scores_mat(1, num_classes, CV_32F, data + (r * row_size + 5));
-
-//            cv::Point classIdPoint;
-//            double confidence;
-
-//            // This now works because scores_mat is explicitly 1 row, 80 columns (dims=2 or less)
-//            minMaxLoc(scores_mat, 0, &confidence, 0, &classIdPoint);
-
-//            // 3. Class Score Threshold & Bounding Box Calculation
-//            if (confidence >= 0.0) { // Can use a class-specific threshold here if desired
-//                // ... (rest of your logic for bounding box and storing results) ...
-
-//                // Example for getting bounding box data:
-//                float cx = data[r * row_size + 0];
-//                float cy = data[r * row_size + 1];
-//                float w = data[r * row_size + 2];
-//                float h = data[r * row_size + 3];
-
-//                // Add this DEBUG CODE inside your loop before the final NMS:
-//                std::cout << "Frame Size: " << frame.cols << "x" << frame.rows
-//                     << " | Factors: " << x_factor << ", " << y_factor
-//                     << " | Raw CX: " << cx << " | Scaled Left: " << std::left << std::endl;
-
-//                // Convert to top-left (x,y) and (w,h)
-//                float x_factor = frame.cols / INPUT_WIDTH;
-//                float y_factor = frame.rows / INPUT_HEIGHT;
-//                int left = (int)((cx - 0.5 * w) * x_factor);
-//                int top = (int)((cy - 0.5 * h) * y_factor);
-//                int width = (int)(w * x_factor);
-//                int height = (int)(h * y_factor);
-//                boxes.push_back(cv::Rect(left, top, width, height));
-
-
-//                // The existing logic for classIds, confidences, and boxes goes here
-//                classIds.push_back(classIdPoint.x);
-//                confidences.push_back((float)confidence * box_confidence); // Use final confidence
-//                boxes.push_back(cv::Rect(left, top, width, height));
-//            }
-//        }
-//    }
-
-//    // 2. Non-Maximum Suppression (NMS)
-//    // NMSBoxes is an OpenCV function that handles the suppression logic efficiently.
-//    std::vector<int> indices;
-//    cv::dnn::NMSBoxes(boxes, confidences, CONF_THRESHOLD, NMS_THRESHOLD, indices);
-
-//    // 3. Draw final detections
-//    for (size_t i = 0; i < indices.size(); ++i) {
-//        int idx = indices[i];
-//        cv::Rect box = boxes[idx];
-
-//        // Draw the box
-//        rectangle(frame, box, cv::Scalar(0, 255, 0), 2);
-
-//        // Draw the label
-//        std::string label = class_names[classIds[idx]] + cv::format(":%.2f", confidences[idx]);
-//        putText(frame, label, cv::Point(box.x, box.y - 5), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
-//    }
+    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
 }
