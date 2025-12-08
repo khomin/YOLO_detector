@@ -12,24 +12,40 @@ const float INPUT_HEIGHT = 640.0;
 const float CONF_THRESHOLD = 0.50; // Minimum confidence to keep a box
 const float NMS_THRESHOLD = 0.50;  // IoU threshold for Non-Maximum Suppression
 
+int frame_count = 0;
+std::vector<cv::Rect> cached_boxes;
+std::vector<int> cached_class_ids;
+std::vector<float> cached_confidences;
+const int INFERENCE_SKIP = 4;
+
 // --- Global Variables ---
 std::vector<std::string> class_names;
 
 // --- Function Prototypes ---
 void load_class_names(const std::string& path);
-void process_predictions(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors, int64& time_start);
+void process_predictions(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors, int64& time_start,
+                         std::vector<cv::Rect>& boxes,
+                         std::vector<int>& class_ids,
+                         std::vector<float>& confidences);
+
+void draw_cached_boxes(cv::Mat& frame,
+                       const std::vector<cv::Scalar>& colors,
+                       int64& time_start,
+                       std::vector<cv::Rect>& boxes,
+                       std::vector<int>& class_ids,
+                       std::vector<float>& confidences);
 
 // --------------------------- MAIN FUNCTION -----------------------------
 int main() {
     // 1. Load Class Names
-    load_class_names("../../resources/coco.names");
+    load_class_names("./resources/coco.names");
     if (class_names.empty()) {
         std::cerr << "ERROR: Could not load class names from coco.names!" << std::endl;
         return -1;
     }
 
     // 2. Load ONNX Model
-    std::string module_path = "../../resources/yolov5n.onnx";
+    std::string module_path = "./resources/yolov5n.onnx";
     cv::dnn::Net net = cv::dnn::readNetFromONNX(module_path);
     if (net.empty()) {
         std::cerr << "ERROR: Failed to load ONNX model!" << std::endl;
@@ -42,6 +58,8 @@ int main() {
 
     // 3. Initialize Camera (0 for default webcam)
     cv::VideoCapture cap(0);
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     if (!cap.isOpened()) {
         std::cerr << "ERROR: Could not open camera 0." << std::endl;
         return -1;
@@ -49,7 +67,6 @@ int main() {
 
     // 4. Detection Loop
     cv::Mat frame;
-    std::vector<cv::Mat> outs;
 
     std::vector<cv::Scalar> colors;
     colors.push_back(cv::Scalar(0, 255, 0));
@@ -60,20 +77,32 @@ int main() {
 
     while (cap.read(frame) && cv::waitKey(1) < 0) {
         int64 time_start = cv::getTickCount();
-        // --- Pre-processing (Image to Blob) ---
-        cv::Mat blob;
-        cv::dnn::blobFromImage(frame, blob, 1/255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
-        net.setInput(blob);
 
-        // --- Inference (Forward Pass) ---
-        net.forward(outs, net.getUnconnectedOutLayersNames());
+        if (frame_count % INFERENCE_SKIP == 0) {
+            std::vector<cv::Mat> outs;
+            cached_boxes.clear();
+            cached_class_ids.clear();
+            cached_confidences.clear();
 
-        // --- Post-processing (NMS and Drawing) ---
-        process_predictions(frame, outs[0], colors, time_start);
+            // --- Pre-processing (Image to Blob) ---
+            cv::Mat blob;
+            cv::dnn::blobFromImage(frame, blob, 1/255.0, cv::Size(INPUT_WIDTH, INPUT_HEIGHT), cv::Scalar(), true, false);
+            net.setInput(blob);
+
+            // --- Inference (Forward Pass) ---
+            net.forward(outs, net.getUnconnectedOutLayersNames());
+
+            // --- Post-processing (NMS and Drawing) ---
+            process_predictions(frame, outs[0], colors, time_start,
+                                cached_boxes, cached_class_ids, cached_confidences);
+            outs.clear();
+        } else {
+            draw_cached_boxes(frame, colors, time_start, cached_boxes, cached_class_ids, cached_confidences);
+        }
+        frame_count++; // Increment the counter
 
         // --- Display ---
         imshow("YOLOv5 C++ Detection (ThinkPad T14)", frame);
-        outs.clear(); // Clear outputs for the next frame
     }
 
     cap.release();
@@ -92,13 +121,17 @@ void load_class_names(const std::string& path) {
 }
 
 void process_predictions(cv::Mat& frame, cv::Mat& outs,
-                         const std::vector<cv::Scalar>& colors, int64& time_start) {
+                         const std::vector<cv::Scalar>& colors,
+                         int64& time_start,
+                         std::vector<cv::Rect>& boxes,
+                         std::vector<int>& class_ids,
+                         std::vector<float>& confidences) {
     cv::Mat det_output(outs.size[1], outs.size[2], CV_32F, outs.ptr<float>());
-
     float confidence_threshold = 0.5;
-    std::vector<cv::Rect> boxes;
-    std::vector<int> classIds;
-    std::vector<float> confidences;
+
+    std::vector<cv::Rect> temp_boxes;
+    std::vector<int> temp_class_ids;
+    std::vector<float> temp_confidences;
 
     for (int i = 0; i < det_output.rows; i++) {
         float confidence = det_output.at<float>(i, 4);
@@ -127,20 +160,54 @@ void process_predictions(cv::Mat& frame, cv::Mat& outs,
             box.width = width;
             box.height = height;
 
-            boxes.push_back(box);
-            classIds.push_back(class_id_point.x);
-            confidences.push_back(score);
+            temp_boxes.push_back(box);
+            temp_class_ids.push_back(class_id_point.x);
+            temp_confidences.push_back(score);
         }
     }
 
     std::vector<int> indexes;
-    cv::dnn::NMSBoxes(boxes, confidences, 0.25, 0.50, indexes);
+    cv::dnn::NMSBoxes(temp_boxes, temp_confidences, 0.25, 0.50, indexes);
 
     for (size_t i = 0; i < indexes.size(); i++) {
         int index = indexes[i];
-        int idx = classIds[index];
-        float confidence = confidences[index];
+        int idx = temp_class_ids[index];
+        float confidence = temp_confidences[index];
 
+        boxes.push_back(temp_boxes[index]);
+        class_ids.push_back(temp_class_ids[index]);
+        confidences.push_back(temp_confidences[index]);
+
+        cv::rectangle(frame, temp_boxes[index], colors[idx % 5], 2, 8);
+
+        std::string label = class_names[idx] + ": " + cv::format("%.2f", confidence);
+
+        cv::rectangle(frame,
+                      cv::Point(temp_boxes[index].tl().x, temp_boxes[index].tl().y - 40),
+                      cv::Point(temp_boxes[index].br().x, temp_boxes[index].tl().y),
+                      cv::Scalar(255, 255, 255), -1);
+
+        cv::putText(frame, label,
+                    cv::Point(temp_boxes[index].tl().x, temp_boxes[index].tl().y - 10),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar());
+
+        std::cout << "Detected: " << class_names[idx] << ", Confidence: " << confidence << std::endl;
+    }
+
+    float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
+    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+}
+
+void draw_cached_boxes(cv::Mat& frame,
+                       const std::vector<cv::Scalar>& colors,
+                       int64& time_start,
+                       std::vector<cv::Rect>& boxes,
+                       std::vector<int>& class_ids,
+                       std::vector<float>& confidences) {
+    int index = 0;
+    for(auto box: boxes) {
+        int idx = class_ids[index];
+        float confidence = confidences[index];
         cv::rectangle(frame, boxes[index], colors[idx % 5], 2, 8);
 
         std::string label = class_names[idx] + ": " + cv::format("%.2f", confidence);
@@ -153,11 +220,8 @@ void process_predictions(cv::Mat& frame, cv::Mat& outs,
         cv::putText(frame, label,
                     cv::Point(boxes[index].tl().x, boxes[index].tl().y - 10),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar());
-
-        std::cout << "Detected: " << class_names[idx] << ", Confidence: " << confidence << std::endl;
+        index++;
     }
-
     float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
-
     cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
 }
