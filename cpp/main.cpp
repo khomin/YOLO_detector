@@ -1,10 +1,14 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <vector>
+#include <algorithm>
+#include <limits>
 
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/video/tracking.hpp> // for KalmanFilter
 
 // --- Configuration Constants ---
 const float INPUT_WIDTH = 640.0;
@@ -13,27 +17,43 @@ const float CONF_THRESHOLD = 0.50; // Minimum confidence to keep a box
 const float NMS_THRESHOLD = 0.50;  // IoU threshold for Non-Maximum Suppression
 
 int frame_count = 0;
-std::vector<cv::Rect> cached_boxes;
-std::vector<int> cached_class_ids;
-std::vector<float> cached_confidences;
 const int INFERENCE_SKIP = 4;
+
+// --- Tracking Constants ---
+const float MATCH_IoU_THRESHOLD = 0.3f;
+const int MAX_MISSED = 10; // remove tracker after this many skipped frames
 
 // --- Global Variables ---
 std::vector<std::string> class_names;
 
+struct Tracker {
+    cv::KalmanFilter kf;
+    int id;
+    int class_id;
+    float last_confidence;
+    int missed_frames;
+
+    Tracker() : id(-1), class_id(-1), last_confidence(0.0f), missed_frames(0) {}
+};
+
 // --- Function Prototypes ---
 void load_class_names(const std::string& path);
-void process_predictions(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors, int64& time_start,
-                         std::vector<cv::Rect>& boxes,
-                         std::vector<int>& class_ids,
-                         std::vector<float>& confidences);
+void process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors,
+                                             int64& time_start,
+                                             std::vector<cv::Rect>& detections,
+                                             std::vector<int>& det_class_ids,
+                                             std::vector<float>& det_confidences,
+                                             std::vector<Tracker>& trackers);
 
-void draw_cached_boxes(cv::Mat& frame,
-                       const std::vector<cv::Scalar>& colors,
-                       int64& time_start,
-                       std::vector<cv::Rect>& boxes,
-                       std::vector<int>& class_ids,
-                       std::vector<float>& confidences);
+void draw_trackers(cv::Mat& frame, const std::vector<cv::Scalar>& colors, int64& time_start, std::vector<Tracker>& trackers);
+
+// utility
+float iou(const cv::Rect& a, const cv::Rect& b);
+cv::Rect rect_from_state(const cv::Mat& state); // state -> rect (x,y,w,h)
+cv::Mat state_from_rect(const cv::Rect& r); // rect -> state (x,y,w,h,0,0,0,0)
+cv::KalmanFilter create_kalman_for_rect(const cv::Rect& r);
+
+int next_tracker_id = 0;
 
 // --------------------------- MAIN FUNCTION -----------------------------
 int main() {
@@ -75,14 +95,18 @@ int main() {
     colors.push_back(cv::Scalar(255, 0, 0));
     colors.push_back(cv::Scalar(0, 0, 255));
 
+    std::vector<Tracker> trackers;
+
     while (cap.read(frame) && cv::waitKey(1) < 0) {
         int64 time_start = cv::getTickCount();
 
+        // storage for detections this frame (only filled on inference frames)
+        std::vector<cv::Rect> detections;
+        std::vector<int> det_class_ids;
+        std::vector<float> det_confidences;
+
         if (frame_count % INFERENCE_SKIP == 0) {
             std::vector<cv::Mat> outs;
-            cached_boxes.clear();
-            cached_class_ids.clear();
-            cached_confidences.clear();
 
             // --- Pre-processing (Image to Blob) ---
             cv::Mat blob;
@@ -92,17 +116,76 @@ int main() {
             // --- Inference (Forward Pass) ---
             net.forward(outs, net.getUnconnectedOutLayersNames());
 
-            // --- Post-processing (NMS and Drawing) ---
-            process_predictions(frame, outs[0], colors, time_start,
-                                cached_boxes, cached_class_ids, cached_confidences);
+            // --- Post-processing (NMS and prepare lists) ---
+            // Reused logic from your process_predictions, but we push into detections vector instead of drawing directly
+            cv::Mat outsMat = outs[0];
+            cv::Mat det_output(outsMat.size[1], outsMat.size[2], CV_32F, outsMat.ptr<float>());
+            for (int i = 0; i < det_output.rows; i++) {
+                float confidence = det_output.at<float>(i, 4);
+                if (confidence < 0.25f) continue;
+                cv::Mat classes_scores = det_output.row(i).colRange(5, outsMat.size[2]);
+                cv::Point class_id_point;
+                double score;
+                minMaxLoc(classes_scores, 0, &score, 0, &class_id_point);
+                if (score > 0.25) {
+                    float x_factor = frame.cols / 640.0f;
+                    float y_factor = frame.rows / 640.0f;
+                    float cx = det_output.at<float>(i, 0);
+                    float cy = det_output.at<float>(i, 1);
+                    float ow = det_output.at<float>(i, 2);
+                    float oh = det_output.at<float>(i, 3);
+                    int x = static_cast<int>((cx - 0.5f * ow) * x_factor);
+                    int y = static_cast<int>((cy - 0.5f * oh) * y_factor);
+                    int width = static_cast<int>(ow * x_factor);
+                    int height = static_cast<int>(oh * y_factor);
+                    cv::Rect box;
+                    box.x = x;
+                    box.y = y;
+                    box.width = width;
+                    box.height = height;
+                    detections.push_back(box);
+                    det_class_ids.push_back(class_id_point.x);
+                    det_confidences.push_back(static_cast<float>(score));
+                }
+            }
+
+            // NMS
+            std::vector<int> indexes;
+            cv::dnn::NMSBoxes(detections, det_confidences, 0.25f, 0.50f, indexes);
+
+            // keep only NMSed lists
+            std::vector<cv::Rect> nms_boxes;
+            std::vector<int> nms_class_ids;
+            std::vector<float> nms_confidences;
+            for (int idx : indexes) {
+                nms_boxes.push_back(detections[idx]);
+                nms_class_ids.push_back(det_class_ids[idx]);
+                nms_confidences.push_back(det_confidences[idx]);
+            }
+            detections.swap(nms_boxes);
+            det_class_ids.swap(nms_class_ids);
+            det_confidences.swap(nms_confidences);
+
+            // --- Update trackers with detections ---
+            process_predictions_and_update_trackers(frame, outs[0], colors, time_start,
+                                                    detections, det_class_ids, det_confidences,
+                                                    trackers);
             outs.clear();
         } else {
-            draw_cached_boxes(frame, colors, time_start, cached_boxes, cached_class_ids, cached_confidences);
+            // no inference this frame: just predict and draw trackers
+            for (auto &tr : trackers) {
+                // predict step
+                cv::Mat prediction = tr.kf.predict();
+                // increase missed frames (we didn't see a detection to correct)
+                tr.missed_frames++;
+            }
+            draw_trackers(frame, colors, time_start, trackers);
         }
+
         frame_count++; // Increment the counter
 
         // --- Display ---
-        imshow("YOLOv5 C++ Detection (ThinkPad T14)", frame);
+        imshow("YOLOv5 C++ Detection (ThinkPad T14) - Kalman Smoothed", frame);
     }
 
     cap.release();
@@ -111,7 +194,6 @@ int main() {
 }
 
 // --------------------------- HELPER FUNCTIONS -----------------------------
-
 void load_class_names(const std::string& path) {
     std::ifstream ifs(path.c_str());
     std::string line;
@@ -120,107 +202,198 @@ void load_class_names(const std::string& path) {
     }
 }
 
-void process_predictions(cv::Mat& frame, cv::Mat& outs,
-                         const std::vector<cv::Scalar>& colors,
-                         int64& time_start,
-                         std::vector<cv::Rect>& boxes,
-                         std::vector<int>& class_ids,
-                         std::vector<float>& confidences) {
-    cv::Mat det_output(outs.size[1], outs.size[2], CV_32F, outs.ptr<float>());
-    float confidence_threshold = 0.5;
-
-    std::vector<cv::Rect> temp_boxes;
-    std::vector<int> temp_class_ids;
-    std::vector<float> temp_confidences;
-
-    for (int i = 0; i < det_output.rows; i++) {
-        float confidence = det_output.at<float>(i, 4);
-        if (confidence < 0.25) {
-            continue;
-        }
-        cv::Mat classes_scores = det_output.row(i).colRange(5, outs.size[2]);
-        cv::Point class_id_point;
-        double score;
-        minMaxLoc(classes_scores, 0, &score, 0, &class_id_point);
-
-        if (score > 0.25) {
-            float x_factor = frame.cols / 640.0f;
-            float y_factor = frame.rows / 640.0f;
-            float cx = det_output.at<float>(i, 0);
-            float cy = det_output.at<float>(i, 1);
-            float ow = det_output.at<float>(i, 2);
-            float oh = det_output.at<float>(i, 3);
-            int x = static_cast<int>((cx - 0.5 * ow) * x_factor);
-            int y = static_cast<int>((cy - 0.5 * oh) * y_factor);
-            int width = static_cast<int>(ow * x_factor);
-            int height = static_cast<int>(oh * y_factor);
-            cv::Rect box;
-            box.x = x;
-            box.y = y;
-            box.width = width;
-            box.height = height;
-
-            temp_boxes.push_back(box);
-            temp_class_ids.push_back(class_id_point.x);
-            temp_confidences.push_back(score);
-        }
-    }
-
-    std::vector<int> indexes;
-    cv::dnn::NMSBoxes(temp_boxes, temp_confidences, 0.25, 0.50, indexes);
-
-    for (size_t i = 0; i < indexes.size(); i++) {
-        int index = indexes[i];
-        int idx = temp_class_ids[index];
-        float confidence = temp_confidences[index];
-
-        boxes.push_back(temp_boxes[index]);
-        class_ids.push_back(temp_class_ids[index]);
-        confidences.push_back(temp_confidences[index]);
-
-        cv::rectangle(frame, temp_boxes[index], colors[idx % 5], 2, 8);
-
-        std::string label = class_names[idx] + ": " + cv::format("%.2f", confidence);
-
-        cv::rectangle(frame,
-                      cv::Point(temp_boxes[index].tl().x, temp_boxes[index].tl().y - 40),
-                      cv::Point(temp_boxes[index].br().x, temp_boxes[index].tl().y),
-                      cv::Scalar(255, 255, 255), -1);
-
-        cv::putText(frame, label,
-                    cv::Point(temp_boxes[index].tl().x, temp_boxes[index].tl().y - 10),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar());
-
-        std::cout << "Detected: " << class_names[idx] << ", Confidence: " << confidence << std::endl;
-    }
-
-    float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
-    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+float iou(const cv::Rect& a, const cv::Rect& b) {
+    int x1 = std::max(a.x, b.x);
+    int y1 = std::max(a.y, b.y);
+    int x2 = std::min(a.x + a.width, b.x + b.width);
+    int y2 = std::min(a.y + a.height, b.y + b.height);
+    int interW = x2 - x1;
+    int interH = y2 - y1;
+    if (interW <= 0 || interH <= 0) return 0.0f;
+    float interArea = static_cast<float>(interW) * interH;
+    float unionA = static_cast<float>(a.width) * a.height + static_cast<float>(b.width) * b.height - interArea;
+    return interArea / unionA;
 }
 
-void draw_cached_boxes(cv::Mat& frame,
-                       const std::vector<cv::Scalar>& colors,
-                       int64& time_start,
-                       std::vector<cv::Rect>& boxes,
-                       std::vector<int>& class_ids,
-                       std::vector<float>& confidences) {
-    int index = 0;
-    for(auto box: boxes) {
-        int idx = class_ids[index];
-        float confidence = confidences[index];
-        cv::rectangle(frame, boxes[index], colors[idx % 5], 2, 8);
+cv::Rect rect_from_state(const cv::Mat& state) {
+    // state: [x, y, w, h, vx, vy, vw, vh]^T
+    float x = state.at<float>(0);
+    float y = state.at<float>(1);
+    float w = state.at<float>(2);
+    float h = state.at<float>(3);
+    cv::Rect r;
+    r.x = static_cast<int>(x);
+    r.y = static_cast<int>(y);
+    r.width = std::max(1, static_cast<int>(w));
+    r.height = std::max(1, static_cast<int>(h));
+    return r;
+}
 
-        std::string label = class_names[idx] + ": " + cv::format("%.2f", confidence);
+cv::Mat state_from_rect(const cv::Rect& r) {
+    cv::Mat state = cv::Mat::zeros(8, 1, CV_32F);
+    state.at<float>(0) = static_cast<float>(r.x);
+    state.at<float>(1) = static_cast<float>(r.y);
+    state.at<float>(2) = static_cast<float>(r.width);
+    state.at<float>(3) = static_cast<float>(r.height);
+    // velocities default 0
+    return state;
+}
+
+cv::KalmanFilter create_kalman_for_rect(const cv::Rect& r) {
+    int stateSize = 8;
+    int measSize = 4;
+    int contrSize = 0;
+    cv::KalmanFilter kf(stateSize, measSize, contrSize, CV_32F);
+
+    // Transition matrix A
+    // [1 0 0 0 1 0 0 0]
+    // [0 1 0 0 0 1 0 0]
+    // [0 0 1 0 0 0 1 0]
+    // [0 0 0 1 0 0 0 1]
+    // velocities remain
+    kf.transitionMatrix = cv::Mat::eye(stateSize, stateSize, CV_32F);
+    kf.transitionMatrix.at<float>(0,4) = 1.0f;
+    kf.transitionMatrix.at<float>(1,5) = 1.0f;
+    kf.transitionMatrix.at<float>(2,6) = 1.0f;
+    kf.transitionMatrix.at<float>(3,7) = 1.0f;
+
+    // Measurement matrix H (maps state to measurements)
+    kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, CV_32F);
+    kf.measurementMatrix.at<float>(0,0) = 1.0f; // x
+    kf.measurementMatrix.at<float>(1,1) = 1.0f; // y
+    kf.measurementMatrix.at<float>(2,2) = 1.0f; // w
+    kf.measurementMatrix.at<float>(3,3) = 1.0f; // h
+
+    // Process noise covariance Q
+    cv::setIdentity(kf.processNoiseCov, cv::Scalar::all(1e-2f));
+    // Measurement noise covariance R
+    cv::setIdentity(kf.measurementNoiseCov, cv::Scalar::all(1e-1f));
+    // Posterior error covariance P
+    cv::setIdentity(kf.errorCovPost, cv::Scalar::all(1.0f));
+
+    // initial state
+    cv::Mat initState = state_from_rect(r);
+    initState.copyTo(kf.statePost);
+
+    return kf;
+}
+
+void process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& outs,
+                                             const std::vector<cv::Scalar>& colors,
+                                             int64& time_start,
+                                             std::vector<cv::Rect>& detections,
+                                             std::vector<int>& det_class_ids,
+                                             std::vector<float>& det_confidences,
+                                             std::vector<Tracker>& trackers) {
+    // For each tracker predict first (so we can match predictions to detections)
+    std::vector<cv::Rect> predicted_boxes;
+    predicted_boxes.reserve(trackers.size());
+    for (auto &tr : trackers) {
+        cv::Mat pred = tr.kf.predict();
+        predicted_boxes.push_back(rect_from_state(pred));
+    }
+
+    // Build IoU cost matrix
+    int T = static_cast<int>(trackers.size());
+    int D = static_cast<int>(detections.size());
+    std::vector<std::vector<float>> iou_mat(T, std::vector<float>(D, 0.0f));
+    for (int t = 0; t < T; ++t) {
+        for (int d = 0; d < D; ++d) {
+            iou_mat[t][d] = iou(predicted_boxes[t], detections[d]);
+        }
+    }
+
+    // Greedy matching: pick best IoU pairs until IoU < threshold
+    std::vector<int> matchT(T, -1); // tracker -> detection idx, -1 if none
+    std::vector<int> matchD(D, -1); // detection -> tracker idx
+
+    while (true) {
+        float bestIoU = MATCH_IoU_THRESHOLD;
+        int bestT = -1, bestD = -1;
+        for (int t = 0; t < T; ++t) {
+            for (int d = 0; d < D; ++d) {
+                if (matchT[t] != -1 || matchD[d] != -1) continue;
+                if (iou_mat[t][d] > bestIoU) {
+                    bestIoU = iou_mat[t][d];
+                    bestT = t;
+                    bestD = d;
+                }
+            }
+        }
+        if (bestT == -1) break;
+        matchT[bestT] = bestD;
+        matchD[bestD] = bestT;
+    }
+
+    // Update matched trackers with measurements
+    for (int t = 0; t < T; ++t) {
+        if (matchT[t] != -1) {
+            int d = matchT[t];
+            // measurement vector
+            cv::Mat meas = cv::Mat::zeros(4,1,CV_32F);
+            meas.at<float>(0) = static_cast<float>(detections[d].x);
+            meas.at<float>(1) = static_cast<float>(detections[d].y);
+            meas.at<float>(2) = static_cast<float>(detections[d].width);
+            meas.at<float>(3) = static_cast<float>(detections[d].height);
+            trackers[t].kf.correct(meas);
+            trackers[t].missed_frames = 0;
+            trackers[t].class_id = det_class_ids[d];
+            trackers[t].last_confidence = det_confidences[d];
+        } else {
+            // no detection matched: we already predicted above; mark missed
+            trackers[t].missed_frames++;
+        }
+    }
+
+    // Create trackers for unmatched detections
+    for (int d = 0; d < D; ++d) {
+        if (matchD[d] == -1) {
+            Tracker tr;
+            tr.kf = create_kalman_for_rect(detections[d]);
+            tr.id = next_tracker_id++;
+            tr.class_id = det_class_ids[d];
+            tr.last_confidence = det_confidences[d];
+            tr.missed_frames = 0;
+            trackers.push_back(std::move(tr));
+        }
+    }
+
+    // Remove dead trackers
+    trackers.erase(std::remove_if(trackers.begin(), trackers.end(),
+                                  [](const Tracker& tr) { return tr.missed_frames > MAX_MISSED; }),
+                   trackers.end());
+
+    // Draw trackers (using updated states)
+    draw_trackers(frame, colors, time_start, trackers);
+}
+
+void draw_trackers(cv::Mat& frame,
+                   const std::vector<cv::Scalar>& colors,
+                   int64& time_start,
+                   std::vector<Tracker>& trackers) {
+    for (auto &tr : trackers) {
+        cv::Mat state = tr.kf.statePost; // use posterior if available
+        // but if recently predicted (no correct), statePost is still valid; otherwise predict above was called
+        cv::Rect box = rect_from_state(state);
+
+        int cls = tr.class_id >= 0 ? tr.class_id : 0;
+        float conf = tr.last_confidence;
+
+        // clamp box inside frame
+        box &= cv::Rect(0,0,frame.cols, frame.rows);
+
+        cv::rectangle(frame, box, colors[cls % colors.size()], 2, 8);
+
+        std::string label = (tr.class_id >= 0 ? class_names[tr.class_id] : std::string("obj")) + ": " + cv::format("%.2f", conf);
 
         cv::rectangle(frame,
-                      cv::Point(boxes[index].tl().x, boxes[index].tl().y - 40),
-                      cv::Point(boxes[index].br().x, boxes[index].tl().y),
+                      cv::Point(box.tl().x, box.tl().y - 24),
+                      cv::Point(box.br().x, box.tl().y),
                       cv::Scalar(255, 255, 255), -1);
 
         cv::putText(frame, label,
-                    cv::Point(boxes[index].tl().x, boxes[index].tl().y - 10),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar());
-        index++;
+                    cv::Point(box.tl().x + 2, box.tl().y - 6),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,0));
     }
     float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
     cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
