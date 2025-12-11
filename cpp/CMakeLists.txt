@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(PROJECT opencv_cpp)
+set(BUILD_CONFIG_CXX_TESTS OFF)
+
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/config-cxx)
 
 project(${PROJECT} LANGUAGES CXX)
 
@@ -22,4 +25,5 @@ file(GLOB OPENCV_LIBRARIES
 
 target_link_libraries(${PROJECT} PUBLIC
     ${OPENCV_LIBRARIES}
+    config-cxx
 )

@@ -10,3 +10,4 @@ python/__pycache__/*.*
 cpp/build-cpp-64bit-Debug/*
 cpp/CMakeLists.txt.user
 .lib_pack/opencv/*
+resources/yolov5n.onnx

@@ -1,12 +1,12 @@
-[submodule "third_party/opencv_contrib"]
-	path = third_party/opencv_contrib
+[submodule "cpp/third_party/opencv_contrib"]
+	path = cpp/third_party/opencv_contrib
 	url = https://github.com/opencv/opencv_contrib.git
-[submodule "third_party/opencv"]
-	path = third_party/opencv
+[submodule "cpp/third_party/opencv"]
+	path = cpp/third_party/opencv
 	url = https://github.com/opencv/opencv.git
-[submodule "third_party/yolo5"]
-	path = third_party/yolo5
+[submodule "cpp/third_party/yolo5"]
+	path = cpp/third_party/yolo5
 	url = https://github.com/ultralytics/yolov5
-[submodule "third_party/config-cxx"]
-	path = third_party/config-cxx
+[submodule "cpp/third_party/config-cxx"]
+	path = cpp/third_party/config-cxx
 	url = https://github.com/cieslarmichal/config-cxx.git

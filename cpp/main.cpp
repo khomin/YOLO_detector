@@ -57,6 +57,9 @@ int next_tracker_id = 0;
 
 // --------------------------- MAIN FUNCTION -----------------------------
 int main() {
+
+
+
     // 1. Load Class Names
     load_class_names("./resources/coco.names");
     if (class_names.empty()) {
