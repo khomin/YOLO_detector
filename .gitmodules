@@ -7,3 +7,6 @@
 [submodule "third_party/yolo5"]
 	path = third_party/yolo5
 	url = https://github.com/ultralytics/yolov5
+[submodule "third_party/config-cxx"]
+	path = third_party/config-cxx
+	url = https://github.com/cieslarmichal/config-cxx.git
