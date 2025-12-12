@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <limits>
 
+#include "config-cxx/Config.h"
+#include "protobuf/generated/tracking_events.pb.h"
+
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
@@ -56,9 +59,26 @@ cv::KalmanFilter create_kalman_for_rect(const cv::Rect& r);
 int next_tracker_id = 0;
 
 // --------------------------- MAIN FUNCTION -----------------------------
+
+
 int main() {
+    config::Config config;
 
+    NetworkClient signal_client(
+        config.get<std::string>("Networking.signal_ip"),
+        config.get<int>("Networking.signal_port")
+    );
 
+    Detector detector;
+    detector.onObject = [&](std::string name) {
+
+    };
+    detector.onFrame = [&](cv::Mat frame) {
+
+    };
+    detector.run();
+
+    auto names = config.get<std::vector<std::string>>("CocoNames");
 
     // 1. Load Class Names
     load_class_names("./resources/coco.names");
