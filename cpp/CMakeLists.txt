@@ -15,17 +15,20 @@ add_executable(${PROJECT}
     main.cpp
     detector.h detector.cpp
     network_client.h network_client.cpp
+    ./protobuf/generated/tracker.pb.h
+    ./protobuf/generated/tracker.pb.cc
+
 )
 
 target_include_directories(${PROJECT} PUBLIC
     ${CMAKE_SOURCE_DIR}/../cpp/
     ${CMAKE_SOURCE_DIR}/../.lib_pack/opencv/include/opencv4
-    ${CMAKE_SOURCE_DIR}/../.lib_pack/protobuf/include
+    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/include
 )
 
 file(GLOB OPENCV_LIBRARIES
     ${CMAKE_SOURCE_DIR}/../.lib_pack/opencv/lib/*.so
-    ${CMAKE_SOURCE_DIR}/../.lib_pack/protobuf/lib/libprotobuf.a
+    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/lib/*.a
 )
 
 target_link_libraries(${PROJECT} PUBLIC

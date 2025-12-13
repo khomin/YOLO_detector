@@ -4,6 +4,16 @@ cd $SCRIPT_PATH
 
 echo "Using protobuf compiler:" `which protoc`
 
+PATH=$PATH:../.lib_pack/build_grpc/x86/bin/
+
+# $(grpc_cpp_plugin)
+
 mkdir -p ../cpp/protobuf/generated
 set -x
-protoc -I=../.lib_pack/protobuf/bin/protoc --cpp_out=../cpp/protobuf/generated --proto_path=../protobuf tracking_events.proto
+
+protoc -I=../protobuf \
+--cpp_out=../cpp/protobuf/generated \
+--grpc_out=../cpp/protobuf/generated \
+--plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) \
+--proto_path=../protobuf \
+tracker.proto
