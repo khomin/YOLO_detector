@@ -2,6 +2,8 @@ syntax = "proto2";
 
 package tracker;
 
+option go_package = "grpc/generated;tracker_pb";
+
 service TrackerService {
   rpc StreamUpdates (stream FrameUpdate) returns (StreamStatus);
 }

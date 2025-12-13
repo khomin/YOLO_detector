@@ -31,14 +31,14 @@ if [ ! -d $TEMP_BUILD_DIR ]; then
 fi
 cd $TEMP_BUILD_DIR
 
-# cmake ../ \
-#     -DgRPC_INSTALL=ON \
-#     -DgRPC_BUILD_TESTS=OFF \
-#     -DCMAKE_CXX_STANDARD=17 \
-#     -DABSL_ROOT_DIR=$INSTALL_DIR/x86 \
-#     -DBUILD_SHARED_LIBS=OFF \
-#     -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR/x86 || exit 1
+cmake ../ \
+    -DgRPC_INSTALL=ON \
+    -DgRPC_BUILD_TESTS=OFF \
+    -DCMAKE_CXX_STANDARD=17 \
+    -DABSL_ROOT_DIR=$INSTALL_DIR/x86 \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR/x86 || exit 1
 
-# make -j16
+make -j16
 
 cmake --install . --prefix $INSTALL_DIR/x86

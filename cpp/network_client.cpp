@@ -15,7 +15,7 @@ int NetworkClient::add(tracker::TrackEvent* event) {
 }
 
 // --- StartStreaming ---
-bool NetworkClient::StartStreaming() {
+bool NetworkClient::startStreaming() {
     std::cout << "Opening new StreamUpdates RPC..." << std::endl;
 
     // Initiate the streaming RPC call:
@@ -44,7 +44,7 @@ bool NetworkClient::sendUpdate(const tracker::FrameUpdate& update) {
 }
 
 // --- StopStreaming ---
-void NetworkClient::StopStreaming() {
+void NetworkClient::stopStreaming() {
     if (!client_writer_) {
         std::cerr << "Cannot stop streaming: writer not initialized." << std::endl;
         return;

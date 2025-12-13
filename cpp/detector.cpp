@@ -16,10 +16,7 @@ const float INPUT_WIDTH = 640.0;
 const float INPUT_HEIGHT = 640.0;
 const float CONF_THRESHOLD = 0.50; // Minimum confidence to keep a box
 const float NMS_THRESHOLD = 0.50;  // IoU threshold for Non-Maximum Suppression
-
-int frame_count = 0;
 const int INFERENCE_SKIP = 4;
-
 // --- Tracking Constants ---
 const float MATCH_IoU_THRESHOLD = 0.3f;
 const int MAX_MISSED = 10; // remove tracker after this many skipped frames
@@ -80,7 +77,7 @@ int Detector::run() {
         std::vector<int> det_class_ids;
         std::vector<float> det_confidences;
 
-        if (frame_count % INFERENCE_SKIP == 0) {
+        if (frame_count_ % INFERENCE_SKIP == 0) {
             std::vector<cv::Mat> outs;
 
             // --- Pre-processing (Image to Blob) ---
@@ -157,7 +154,9 @@ int Detector::run() {
             draw_trackers(frame, colors, time_start, trackers);
         }
 
-        frame_count++; // Increment the counter
+        frame_count_++; // Increment the counter
+
+        send_result(detections, det_class_ids, det_confidences);
 
         // --- Display ---
         imshow("YOLOv5 C++ Detection (ThinkPad T14) - Kalman Smoothed", frame);
@@ -166,6 +165,39 @@ int Detector::run() {
     cap.release();
     cv::destroyAllWindows();
     return 0;
+}
+
+void Detector::send_result(std::vector<cv::Rect>& detections,
+                           std::vector<int>& det_class_ids,
+                           std::vector<float>& det_confidences) {
+    if (detections.size() != det_class_ids.size() || detections.size() != det_confidences.size()) {
+        std::cerr << "Error: Detection result vectors have mismatched sizes." << std::endl;
+        return;
+    }
+    tracker::FrameUpdate frame_update;
+    frame_update.set_frame_number(frame_count_);
+
+    for (size_t i = 0; i < detections.size(); ++i) {
+        const cv::Rect& rect = detections[i];
+
+        // IMPORTANT: repeated fields have an 'Add()' method.
+        // This creates a new 'TrackEvent' sub-message and returns a pointer to it.
+        tracker::TrackEvent* event = frame_update.add_events();
+
+        // --- Populate TrackEvent fields ---
+        event->set_class_id(det_class_ids[i]);
+        event->set_confidence(det_confidences[i]);
+
+        // --- Populate the BoundingBox sub-message ---
+        tracker::BoundingBox* bbox = event->mutable_box();
+        bbox->set_x(rect.x);
+        bbox->set_y(rect.y);
+        bbox->set_width(rect.width);
+        bbox->set_height(rect.height);
+    }
+    if(onFrameReady) {
+        onFrameReady(frame_update);
+    }
 }
 
 void Detector::load_class_names(const std::string& path) {

@@ -3,15 +3,16 @@
 
 #include <string>
 #include "protobuf/generated/tracker.pb.h"
+#include "protobuf/generated/tracker.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
 class NetworkClient {
 public:
     NetworkClient(std::string ip, int port);
 
-    bool StartStreaming();
+    bool startStreaming();
+    void stopStreaming();
     bool sendUpdate(const tracker::FrameUpdate& update);
-    void StopStreaming();
 
     int add(tracker::TrackEvent* event);
 

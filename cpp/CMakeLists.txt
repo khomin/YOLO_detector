@@ -17,6 +17,8 @@ add_executable(${PROJECT}
     network_client.h network_client.cpp
     ./protobuf/generated/tracker.pb.h
     ./protobuf/generated/tracker.pb.cc
+    ./protobuf/generated/tracker.grpc.pb.h
+    ./protobuf/generated/tracker.grpc.pb.cc
 
 )
 
@@ -28,10 +30,15 @@ target_include_directories(${PROJECT} PUBLIC
 
 file(GLOB OPENCV_LIBRARIES
     ${CMAKE_SOURCE_DIR}/../.lib_pack/opencv/lib/*.so
-    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/lib/*.a
 )
+
+file(GLOB GRPC_AND_DEPS_LIBRARIES
+    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/lib/*.so
+)
+
 
 target_link_libraries(${PROJECT} PUBLIC
     ${OPENCV_LIBRARIES}
+    ${GRPC_AND_DEPS_LIBRARIES}
     config-cxx
 )

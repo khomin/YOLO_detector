@@ -26,11 +26,16 @@ public:
 
     int run();
 
-    std::function<void(tracker::TrackEvent* event)> onFrameReady;
+    std::function<void(tracker::FrameUpdate& event)> onFrameReady;
 
 private:
 
-    // --- Function Prototypes ---
+    void send_result(
+        std::vector<cv::Rect>& detections,
+        std::vector<int>& det_class_ids,
+        std::vector<float>& det_confidences
+     );
+
     void load_class_names(const std::string& path);
     void process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors,
                                                  int64& time_start,
@@ -50,6 +55,7 @@ private:
     std::vector<std::string> _class_names;
     std::string _module_path;
     int next_tracker_id = 0;
+    int frame_count_ = 0;
 };
 
 #endif // DETECTOR_H
