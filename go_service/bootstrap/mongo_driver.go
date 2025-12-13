@@ -3,9 +3,7 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type MongoDriver struct {
@@ -20,22 +18,22 @@ type MongoDriver struct {
 
 func InitMongo(env *Env) DatabaseUseCase {
 	db := MongoDriver{}
-	db.Ctx = context.TODO()
-	clientOptions := options.Client().ApplyURI(env.DB_HOST)
-	client, err := mongo.Connect(db.Ctx, clientOptions)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	db.Client = client
-	db.Db = client.Database(env.DB_NAME)
-	err = client.Ping(db.Ctx, nil)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	db.ClientCollection = (*db.Db).Collection(env.CLIENT_COLLECTION)
-	db.Views = (*db.Db).Collection(env.VIEWS_COLLECTION)
-	db.SessionSubscriber = (*db.Db).Collection(env.SESSION_SUBSCRIBER_COLLECTION)
-	db.SessionDevice = (*db.Db).Collection(env.SESSION_DEVICE_COLLECTION)
+	// db.Ctx = context.TODO()
+	// clientOptions := options.Client().ApplyURI(env.DB_HOST)
+	// client, err := mongo.Connect(db.Ctx, clientOptions)
+	// if err != nil {
+	// 	logrus.Fatal(err)
+	// }
+	// db.Client = client
+	// db.Db = client.Database(env.DB_NAME)
+	// err = client.Ping(db.Ctx, nil)
+	// if err != nil {
+	// 	logrus.Fatal(err)
+	// }
+	// db.ClientCollection = (*db.Db).Collection(env.CLIENT_COLLECTION)
+	// db.Views = (*db.Db).Collection(env.VIEWS_COLLECTION)
+	// db.SessionSubscriber = (*db.Db).Collection(env.SESSION_SUBSCRIBER_COLLECTION)
+	// db.SessionDevice = (*db.Db).Collection(env.SESSION_DEVICE_COLLECTION)
 	return &db
 }
 

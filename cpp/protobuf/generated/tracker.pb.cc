@@ -118,7 +118,6 @@ inline constexpr FrameUpdate::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
         events_{},
-        high_priority_active_{false},
         frame_number_{0} {}
 
 template <typename>
@@ -176,13 +175,11 @@ const ::uint32_t
         4,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_._has_bits_),
-        6, // hasbit index offset
+        5, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.events_),
-        PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.high_priority_active_),
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.frame_number_),
         ~0u,
         0,
-        1,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::tracker::StreamStatus, _impl_._has_bits_),
         5, // hasbit index offset
@@ -197,7 +194,7 @@ static const ::_pbi::MigrationSchema
         {0, sizeof(::tracker::BoundingBox)},
         {11, sizeof(::tracker::TrackEvent)},
         {26, sizeof(::tracker::FrameUpdate)},
-        {35, sizeof(::tracker::StreamStatus)},
+        {33, sizeof(::tracker::StreamStatus)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::tracker::_BoundingBox_default_instance_._instance,
@@ -213,18 +210,18 @@ const char descriptor_table_protodef_tracker_2eproto[] ABSL_ATTRIBUTE_SECTION_VA
     "d\030\001 \002(\005\022\022\n\nclass_name\030\002 \002(\t\022!\n\003box\030\003 \002(\013"
     "2\024.tracker.BoundingBox\022\020\n\010class_id\030\004 \001(\005"
     "\022\022\n\nconfidence\030\005 \001(\002\022\024\n\014timestamp_ms\030\006 \001"
-    "(\003\"f\n\013FrameUpdate\022#\n\006events\030\001 \003(\0132\023.trac"
-    "ker.TrackEvent\022\034\n\024high_priority_active\030\002"
-    " \002(\010\022\024\n\014frame_number\030\003 \001(\005\"0\n\014StreamStat"
-    "us\022\017\n\007success\030\001 \002(\010\022\017\n\007message\030\002 \001(\t2P\n\016"
-    "TrackerService\022>\n\rStreamUpdates\022\024.tracke"
-    "r.FrameUpdate\032\025.tracker.StreamStatus(\001"
+    "(\003\"H\n\013FrameUpdate\022#\n\006events\030\001 \003(\0132\023.trac"
+    "ker.TrackEvent\022\024\n\014frame_number\030\002 \001(\005\"0\n\014"
+    "StreamStatus\022\017\n\007success\030\001 \002(\010\022\017\n\007message"
+    "\030\002 \001(\t2P\n\016TrackerService\022>\n\rStreamUpdate"
+    "s\022\024.tracker.FrameUpdate\032\025.tracker.Stream"
+    "Status(\001B\016Z\014.;tracker_pb"
 };
 static ::absl::once_flag descriptor_table_tracker_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_tracker_2eproto = {
     false,
     false,
-    478,
+    464,
     descriptor_table_protodef_tracker_2eproto,
     "tracker.proto",
     &descriptor_table_tracker_2eproto_once,
@@ -986,9 +983,6 @@ class FrameUpdate::_Internal {
       decltype(::std::declval<FrameUpdate>()._impl_._has_bits_);
   static constexpr ::int32_t kHasBitsOffset =
       8 * PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_._has_bits_);
-  static bool MissingRequiredFields(const HasBits& has_bits) {
-    return ((has_bits[0] & 0x00000001) ^ 0x00000001) != 0;
-  }
 };
 
 FrameUpdate::FrameUpdate(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
@@ -1021,13 +1015,7 @@ FrameUpdate::FrameUpdate(
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
-  ::memcpy(reinterpret_cast<char *>(&_impl_) +
-               offsetof(Impl_, high_priority_active_),
-           reinterpret_cast<const char *>(&from._impl_) +
-               offsetof(Impl_, high_priority_active_),
-           offsetof(Impl_, frame_number_) -
-               offsetof(Impl_, high_priority_active_) +
-               sizeof(Impl_::frame_number_));
+  _impl_.frame_number_ = from._impl_.frame_number_;
 
   // @@protoc_insertion_point(copy_constructor:tracker.FrameUpdate)
 }
@@ -1039,12 +1027,7 @@ PROTOBUF_NDEBUG_INLINE FrameUpdate::Impl_::Impl_(
 
 inline void FrameUpdate::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
-  ::memset(reinterpret_cast<char *>(&_impl_) +
-               offsetof(Impl_, high_priority_active_),
-           0,
-           offsetof(Impl_, frame_number_) -
-               offsetof(Impl_, high_priority_active_) +
-               sizeof(Impl_::frame_number_));
+  _impl_.frame_number_ = {};
 }
 FrameUpdate::~FrameUpdate() {
   // @@protoc_insertion_point(destructor:tracker.FrameUpdate)
@@ -1112,16 +1095,16 @@ FrameUpdate::GetClassData() const {
   return FrameUpdate_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 3, 1, 0, 2>
+const ::_pbi::TcParseTable<1, 2, 1, 0, 2>
 FrameUpdate::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_._has_bits_),
     0, // no _extensions_
-    3, 24,  // max_field_number, fast_idx_mask
+    2, 8,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967288,  // skipmap
+    4294967292,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    3,  // num_field_entries
+    2,  // num_field_entries
     1,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     FrameUpdate_class_data_.base(),
@@ -1131,27 +1114,20 @@ FrameUpdate::_table_ = {
     ::_pbi::TcParser::GetTable<::tracker::FrameUpdate>(),  // to_prefetch
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
+    // optional int32 frame_number = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(FrameUpdate, _impl_.frame_number_), 0>(),
+     {16, 0, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_)}},
     // repeated .tracker.TrackEvent events = 1;
     {::_pbi::TcParser::FastMtR1,
      {10, 63, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.events_)}},
-    // required bool high_priority_active = 2;
-    {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(FrameUpdate, _impl_.high_priority_active_), 0>(),
-     {16, 0, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.high_priority_active_)}},
-    // optional int32 frame_number = 3;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(FrameUpdate, _impl_.frame_number_), 1>(),
-     {24, 1, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_)}},
   }}, {{
     65535, 65535
   }}, {{
     // repeated .tracker.TrackEvent events = 1;
     {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.events_), -1, 0,
     (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
-    // required bool high_priority_active = 2;
-    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.high_priority_active_), _Internal::kHasBitsOffset + 0, 0,
-    (0 | ::_fl::kFcOptional | ::_fl::kBool)},
-    // optional int32 frame_number = 3;
-    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_), _Internal::kHasBitsOffset + 1, 0,
+    // optional int32 frame_number = 2;
+    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_), _Internal::kHasBitsOffset + 0, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
   }},
   {{
@@ -1168,12 +1144,7 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
   (void) cached_has_bits;
 
   _impl_.events_.Clear();
-  cached_has_bits = _impl_._has_bits_[0];
-  if ((cached_has_bits & 0x00000003u) != 0) {
-    ::memset(&_impl_.high_priority_active_, 0, static_cast<::size_t>(
-        reinterpret_cast<char*>(&_impl_.frame_number_) -
-        reinterpret_cast<char*>(&_impl_.high_priority_active_)) + sizeof(_impl_.frame_number_));
-  }
+  _impl_.frame_number_ = 0;
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
@@ -1205,17 +1176,10 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
   }
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // required bool high_priority_active = 2;
+  // optional int32 frame_number = 2;
   if ((cached_has_bits & 0x00000001u) != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::_pbi::WireFormatLite::WriteBoolToArray(
-        2, this_._internal_high_priority_active(), target);
-  }
-
-  // optional int32 frame_number = 3;
-  if ((cached_has_bits & 0x00000002u) != 0) {
     target =
-        ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<3>(
+        ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<2>(
             stream, this_._internal_frame_number(), target);
   }
 
@@ -1252,11 +1216,10 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
       }
     }
   }
-  cached_has_bits = this_._impl_._has_bits_[0];
-  total_size += static_cast<bool>(0x00000001u & cached_has_bits) * 2;
    {
-    // optional int32 frame_number = 3;
-    if ((cached_has_bits & 0x00000002u) != 0) {
+    // optional int32 frame_number = 2;
+    cached_has_bits = this_._impl_._has_bits_[0];
+    if ((cached_has_bits & 0x00000001u) != 0) {
       total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
           this_._internal_frame_number());
     }
@@ -1276,13 +1239,8 @@ void FrameUpdate::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::goo
   _this->_internal_mutable_events()->MergeFrom(
       from._internal_events());
   cached_has_bits = from._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x00000003u) != 0) {
-    if ((cached_has_bits & 0x00000001u) != 0) {
-      _this->_impl_.high_priority_active_ = from._impl_.high_priority_active_;
-    }
-    if ((cached_has_bits & 0x00000002u) != 0) {
-      _this->_impl_.frame_number_ = from._impl_.frame_number_;
-    }
+  if ((cached_has_bits & 0x00000001u) != 0) {
+    _this->_impl_.frame_number_ = from._impl_.frame_number_;
   }
   _this->_impl_._has_bits_[0] |= cached_has_bits;
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
@@ -1298,9 +1256,6 @@ void FrameUpdate::CopyFrom(const FrameUpdate& from) {
 PROTOBUF_NOINLINE bool FrameUpdate::IsInitializedImpl(
     const MessageLite& msg) {
   auto& this_ = static_cast<const FrameUpdate&>(msg);
-  if (_Internal::MissingRequiredFields(this_._impl_._has_bits_)) {
-    return false;
-  }
   if (!::google::protobuf::internal::AllAreInitialized(this_._internal_events()))
     return false;
   return true;
@@ -1311,12 +1266,7 @@ void FrameUpdate::InternalSwap(FrameUpdate* PROTOBUF_RESTRICT PROTOBUF_NONNULL o
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   _impl_.events_.InternalSwap(&other->_impl_.events_);
-  ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_)
-      + sizeof(FrameUpdate::_impl_.frame_number_)
-      - PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.high_priority_active_)>(
-          reinterpret_cast<char*>(&_impl_.high_priority_active_),
-          reinterpret_cast<char*>(&other->_impl_.high_priority_active_));
+  swap(_impl_.frame_number_, other->_impl_.frame_number_);
 }
 
 ::google::protobuf::Metadata FrameUpdate::GetMetadata() const {

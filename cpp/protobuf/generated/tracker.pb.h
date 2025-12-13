@@ -953,8 +953,7 @@ class FrameUpdate final : public ::google::protobuf::Message
   // accessors -------------------------------------------------------
   enum : int {
     kEventsFieldNumber = 1,
-    kHighPriorityActiveFieldNumber = 2,
-    kFrameNumberFieldNumber = 3,
+    kFrameNumberFieldNumber = 2,
   };
   // repeated .tracker.TrackEvent events = 1;
   int events_size() const;
@@ -973,18 +972,7 @@ class FrameUpdate final : public ::google::protobuf::Message
   const ::tracker::TrackEvent& events(int index) const;
   ::tracker::TrackEvent* PROTOBUF_NONNULL add_events();
   const ::google::protobuf::RepeatedPtrField<::tracker::TrackEvent>& events() const;
-  // required bool high_priority_active = 2;
-  bool has_high_priority_active() const;
-  void clear_high_priority_active() ;
-  bool high_priority_active() const;
-  void set_high_priority_active(bool value);
-
-  private:
-  bool _internal_high_priority_active() const;
-  void _internal_set_high_priority_active(bool value);
-
-  public:
-  // optional int32 frame_number = 3;
+  // optional int32 frame_number = 2;
   bool has_frame_number() const;
   void clear_frame_number() ;
   ::int32_t frame_number() const;
@@ -999,7 +987,7 @@ class FrameUpdate final : public ::google::protobuf::Message
  private:
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<2, 3,
+  static const ::google::protobuf::internal::TcParseTable<1, 2,
                                    1, 0,
                                    2>
       _table_;
@@ -1022,7 +1010,6 @@ class FrameUpdate final : public ::google::protobuf::Message
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::RepeatedPtrField< ::tracker::TrackEvent > events_;
-    bool high_priority_active_;
     ::int32_t frame_number_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -1497,43 +1484,15 @@ FrameUpdate::_internal_mutable_events() {
   return &_impl_.events_;
 }
 
-// required bool high_priority_active = 2;
-inline bool FrameUpdate::has_high_priority_active() const {
-  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
-  return value;
-}
-inline void FrameUpdate::clear_high_priority_active() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.high_priority_active_ = false;
-  _impl_._has_bits_[0] &= ~0x00000001u;
-}
-inline bool FrameUpdate::high_priority_active() const {
-  // @@protoc_insertion_point(field_get:tracker.FrameUpdate.high_priority_active)
-  return _internal_high_priority_active();
-}
-inline void FrameUpdate::set_high_priority_active(bool value) {
-  _internal_set_high_priority_active(value);
-  _impl_._has_bits_[0] |= 0x00000001u;
-  // @@protoc_insertion_point(field_set:tracker.FrameUpdate.high_priority_active)
-}
-inline bool FrameUpdate::_internal_high_priority_active() const {
-  ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.high_priority_active_;
-}
-inline void FrameUpdate::_internal_set_high_priority_active(bool value) {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.high_priority_active_ = value;
-}
-
-// optional int32 frame_number = 3;
+// optional int32 frame_number = 2;
 inline bool FrameUpdate::has_frame_number() const {
-  bool value = (_impl_._has_bits_[0] & 0x00000002u) != 0;
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
   return value;
 }
 inline void FrameUpdate::clear_frame_number() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.frame_number_ = 0;
-  _impl_._has_bits_[0] &= ~0x00000002u;
+  _impl_._has_bits_[0] &= ~0x00000001u;
 }
 inline ::int32_t FrameUpdate::frame_number() const {
   // @@protoc_insertion_point(field_get:tracker.FrameUpdate.frame_number)
@@ -1541,7 +1500,7 @@ inline ::int32_t FrameUpdate::frame_number() const {
 }
 inline void FrameUpdate::set_frame_number(::int32_t value) {
   _internal_set_frame_number(value);
-  _impl_._has_bits_[0] |= 0x00000002u;
+  _impl_._has_bits_[0] |= 0x00000001u;
   // @@protoc_insertion_point(field_set:tracker.FrameUpdate.frame_number)
 }
 inline ::int32_t FrameUpdate::_internal_frame_number() const {

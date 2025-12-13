@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,7 +18,7 @@ type Application struct {
 
 func App() Application {
 	app := &Application{}
-	app.Env = NewEnv(app.GetConfPath())
+	app.Env = NewEnv(os.Args[1])
 	app.InitLog()
 	app.Db = InitDatabase(app.Env)
 	return *app
@@ -49,22 +48,6 @@ func (a *Application) InitLog() {
 	logrus.SetOutput(multiWriter)
 }
 
-func (a *Application) GetConfPath() string {
-	flag.Parse()
-	confPath := ""
-	if len(os.Args) >= 2 {
-		confPath = os.Args[1]
-	}
-	if confPath == "" {
-		confPath = os.Getenv("CONFIG")
-	}
-	if confPath == "" {
-		confPath = "/etc/opt/go_service/service.conf"
-	}
-	return confPath
-}
-
-func (app *Application) FreeResources() {
-	CloseDBConnection(app.Db)
+func (app *Application) Close() {
 	app.LogFile.Close()
 }

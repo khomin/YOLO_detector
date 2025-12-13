@@ -20,7 +20,7 @@ const int INFERENCE_SKIP = 4;
 // --- Tracking Constants ---
 const float MATCH_IoU_THRESHOLD = 0.3f;
 const int MAX_MISSED = 10; // remove tracker after this many skipped frames
-
+const uint32_t DETECTOR_NODE_ID = 42;
 
 Detector::Detector(std::vector<std::string> class_names,
                    std::string module_path) :
@@ -69,7 +69,12 @@ int Detector::run() {
 
     std::vector<Tracker> trackers;
 
-    while (cap.read(frame) && cv::waitKey(1) < 0) {
+    while (cap.read(frame)) {
+        auto key = cv::waitKey(1);
+        if (key == 'q' || key == 27) { // 27 is the ASCII code for ESC
+            std::cout << "User pressed 'q' or ESC. Exiting video loop." << std::endl;
+            break;
+        }
         int64 time_start = cv::getTickCount();
 
         // storage for detections this frame (only filled on inference frames)
@@ -185,6 +190,9 @@ void Detector::send_result(std::vector<cv::Rect>& detections,
         tracker::TrackEvent* event = frame_update.add_events();
 
         // --- Populate TrackEvent fields ---
+        event->set_tracker_id(DETECTOR_NODE_ID);
+        event->set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        event->set_class_name(_class_names[i]);
         event->set_class_id(det_class_ids[i]);
         event->set_confidence(det_confidences[i]);
 
@@ -197,14 +205,6 @@ void Detector::send_result(std::vector<cv::Rect>& detections,
     }
     if(onFrameReady) {
         onFrameReady(frame_update);
-    }
-}
-
-void Detector::load_class_names(const std::string& path) {
-    std::ifstream ifs(path.c_str());
-    std::string line;
-    while (getline(ifs, line)) {
-        _class_names.push_back(line);
     }
 }
 

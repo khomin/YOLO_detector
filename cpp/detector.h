@@ -36,7 +36,6 @@ private:
         std::vector<float>& det_confidences
      );
 
-    void load_class_names(const std::string& path);
     void process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors,
                                                  int64& time_start,
                                                  std::vector<cv::Rect>& detections,

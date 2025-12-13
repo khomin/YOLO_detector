@@ -2,7 +2,7 @@
 
 NetworkClient::NetworkClient(std::string ip, int port) {
     // 1. Create a Channel to the Go server (using insecure credentials for local setup)
-    std::string target_address = ip + std::to_string(port);
+    std::string target_address = ip + ":" + std::to_string(port);
     channel_ = grpc::CreateChannel(target_address, grpc::InsecureChannelCredentials());
 
     // 2. Create the Stub (The Client Proxy that handles RPC calls)

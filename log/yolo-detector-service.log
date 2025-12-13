@@ -1,0 +1,24 @@
+[31mFATA[0m[Sat, 13 Dec 2025 21:52:17 +0400] Failed to listen: listen tcp: lookup tcp/%s127.0.0.18001: unknown port 
+[36mINFO[0m[Sat, 13 Dec 2025 21:56:48 +0400] gRPC Server listening on 8001                
+[36mINFO[0m[Sat, 13 Dec 2025 21:56:58 +0400] gRPC Server listening on 8001                
+[36mINFO[0m[Sat, 13 Dec 2025 21:57:31 +0400] REST Server listening on                     
+[36mINFO[0m[Sat, 13 Dec 2025 21:57:31 +0400] gRPC Server listening on 8001                
+[36mINFO[0m[Sat, 13 Dec 2025 21:57:56 +0400] REST Server listening on 8002                
+[36mINFO[0m[Sat, 13 Dec 2025 21:57:56 +0400] gRPC Server listening on 8001                
+[36mINFO[0m[Sat, 13 Dec 2025 21:58:45 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 21:58:45 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 21:59:11 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 21:59:11 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 21:59:58 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 21:59:58 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:00:35 +0400] REST Server listening on 8081                
+[31mFATA[0m[Sat, 13 Dec 2025 22:00:35 +0400] Failed to listen: listen tcp: address [::1]::8082: too many colons in address 
+[36mINFO[0m[Sat, 13 Dec 2025 22:00:47 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 22:00:47 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:01:54 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 22:01:54 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:02:22 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:02:22 +0400] REST Server listening on 8081                
+[36mINFO[0m[Sat, 13 Dec 2025 22:02:34 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:02:56 +0400] gRPC Server listening on 8082                
+[36mINFO[0m[Sat, 13 Dec 2025 22:03:25 +0400] gRPC Server listening on 8082                

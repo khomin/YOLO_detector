@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package tracker;
 
-option go_package = "grpc/generated;tracker_pb";
+option go_package = ".;tracker_pb";
 
 service TrackerService {
   rpc StreamUpdates (stream FrameUpdate) returns (StreamStatus);
@@ -26,8 +26,7 @@ message TrackEvent {
 
 message FrameUpdate {
     repeated TrackEvent events = 1;
-    required bool high_priority_active = 2; 
-    optional int32 frame_number = 3;
+    optional int32 frame_number = 2;
 }
 
 message StreamStatus {

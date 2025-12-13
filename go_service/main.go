@@ -1,123 +1,52 @@
-// package main
 package main
 
 import (
-	"io"
-	"log"
 	"net"
-	"sync"
-	"time"
+	"os"
+	"yolo-detector-service/bootstrap"
+	"yolo-detector-service/controller"
+	pb "yolo-detector-service/grpc/generated"
 
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	// IMPORTANT: Update this import path to where your generated tracker.pb.go lives
-	// pb "grpc/generated/your/project/go_service/grpc/generated/tracker_pb"
-	pb "grpc/generated/your/project/go_service/grpc/generated/tracker_pb"
 )
 
-// The duration the server waits after high-priority_active turns false
-const CooldownDuration = 10 * time.Second
-
-// TrackerServer implements the generated gRPC service interface
-type TrackerServer struct {
-	// Required to be embedded for forward compatibility
-	pb.UnimplementedTrackerServiceServer
-
-	mu           sync.Mutex // Mutex to protect shared state access
-	sessionState string     // "IDLE", "RECORDING"
-}
-
-func NewTrackerServer() *TrackerServer {
-	return &TrackerServer{
-		sessionState: "IDLE",
-	}
-}
-
-// -------------------------------------------------------------
-// Core Business Logic: The Client Streaming Handler
-// -------------------------------------------------------------
-
-// StreamUpdates implements the Client Streaming RPC method.
-func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServer) error {
-	log.Println("New C++ client connected. Starting session watcher...")
-
-	// --- Session State Management ---
-	// Use a non-blocking channel for the cooldown timer
-	cooldownTimer := time.NewTimer(0)
-	cooldownTimer.Stop() // Stop immediately; will be reset on first activity
-
-	// Main loop to continuously read messages from the C++ client
-	for {
-		update, err := stream.Recv()
-
-		// Handle stream closure (Client calls WritesDone())
-		if err == io.EOF {
-			log.Println("C++ client stream finished. Shutting down session.")
-			// Send the final status back to the C++ client
-			return stream.SendAndClose(&pb.StreamStatus{Success: true})
-		}
-		if err != nil {
-			log.Printf("Error receiving frame update: %v", err)
-			return err
-		}
-
-		s.mu.Lock()
-
-		// 1. Check for High-Priority Activity (e.g., Dog detected)
-		if update.GetHighPriorityActive() {
-			if s.sessionState == "IDLE" {
-				log.Println("-> STATE CHANGE: IDLE -> RECORDING (High priority event)")
-				s.sessionState = "RECORDING"
-				// Action: Start video archiving / web stream here
-			}
-			// Reset the cooldown timer whenever activity is detected
-			cooldownTimer.Reset(CooldownDuration)
-		}
-
-		// 2. Check for Cooldown Expiration
-		select {
-		case <-cooldownTimer.C:
-			// Timer fired: No activity detected for CooldownDuration
-			if s.sessionState == "RECORDING" {
-				log.Println("-> STATE CHANGE: RECORDING -> IDLE (Cooldown expired)")
-				s.sessionState = "IDLE"
-				// Action: Stop video archiving / web stream here
-			}
-		default:
-			// Timer has not fired (or was just reset). Do nothing.
-		}
-
-		// Optional: Log the state and current event count for debugging
-		log.Printf("Session: %s | Events: %d | Frame: %d",
-			s.sessionState, len(update.GetDetections()), update.GetFrameId())
-
-		s.mu.Unlock()
-	}
-}
-
-// -------------------------------------------------------------
-// Main Function
-// -------------------------------------------------------------
-
 func main() {
-	// 1. Setup Listener
+	if len(os.Args) != 2 {
+		logrus.Fatal("Failed, config path as argument is required")
+	}
+	app := bootstrap.App()
+	env := app.Env
+
+	s := grpc.NewServer()
+
+	// lis, err := net.Listen("tcp", fmt.Sprintf("[::1]:%s", env.EVENT_SERVER_PORT))
 	const port = ":8081"
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		logrus.Fatalf("Failed to listen: %v", err)
+	}
+	logrus.Printf("gRPC Server listening on %s", env.EVENT_SERVER_PORT)
+
+	// gMain := gin.New()
+	// gMain.Use(gin.Recovery())
+
+	trackerServer := &controller.TrackerServer{
+		Env: env,
 	}
 
-	// 2. Create gRPC Server
-	s := grpc.NewServer()
+	// gMain.POST("/v1/test", trackerServer.TestMethod)
 
-	// 3. Register our service implementation
-	trackerServer := NewTrackerServer()
+	// go gMain.Run(env.REST_IP + ":" + env.REST_PORT)
+	// logrus.Printf("REST Server listening on %s", env.REST_PORT)
+
 	pb.RegisterTrackerServiceServer(s, trackerServer)
 
-	log.Printf("gRPC Server listening on %s", port)
-	// Run the server (this is a blocking call)
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		logrus.Fatalf("Failed to serve: %v", err)
 	}
+
+	defer app.Close()
 }
 
 // import (
