@@ -34,7 +34,11 @@ int main() {
     );
 
     detector.onFrameReady = [&](tracker::FrameUpdate& event) {
-        signal_client.sendUpdate(event);
+        bool success = signal_client.sendUpdate(event);
+        if(!success) {
+//            signal_client.stopStreaming();
+            signal_client.startStreaming();
+        }
     };
     detector.run();
 

@@ -10,6 +10,10 @@ NetworkClient::NetworkClient(std::string ip, int port) {
     std::cout << "NetworkClient initialized for server: " << target_address << std::endl;
 }
 
+NetworkClient::~NetworkClient() {
+    // TODO
+}
+
 int NetworkClient::add(tracker::TrackEvent* event) {
     return 0;
 }
@@ -18,9 +22,26 @@ int NetworkClient::add(tracker::TrackEvent* event) {
 bool NetworkClient::startStreaming() {
     std::cout << "Opening new StreamUpdates RPC..." << std::endl;
 
+    if (client_writer_ != nullptr) {
+        // Important: You must explicitly close the stream to release resources.
+        // Even though the Write() failed, the resources are still held.
+        client_writer_->WritesDone();
+
+        // Finish the RPC and get the final status
+        grpc::Status status = client_writer_->Finish();
+
+        // Delete the old writer object
+        client_writer_ = nullptr;
+    }
+
+    if (context_ != nullptr) {
+        context_ = nullptr;
+    }
+    context_ = std::make_shared<grpc::ClientContext>();
+
     // Initiate the streaming RPC call:
     // The stub creates the ClientWriter object, linking the context and the final response object.
-    client_writer_ = stub_->StreamUpdates(&context_, &status_response_);
+    client_writer_ = stub_->StreamUpdates(context_.get(), &status_response_);
 
     if (!client_writer_) {
         std::cerr << "ERROR: Failed to create ClientWriter for stream." << std::endl;
@@ -63,4 +84,5 @@ void NetworkClient::stopStreaming() {
         std::cerr << "RPC failed (" << status.error_code() << "): "
                   << status.error_message() << std::endl;
     }
+    client_writer_ = nullptr;
 }

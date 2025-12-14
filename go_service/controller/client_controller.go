@@ -3,13 +3,11 @@ package controller
 import (
 	"io"
 	"log"
-	"net/http"
 	"sync"
 	"time"
-	"yolo-detector-service/bootstrap"
 	pb "yolo-detector-service/grpc/generated"
 
-	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
 )
 
 // type ClientControlller struct {
@@ -17,12 +15,13 @@ import (
 // }
 
 type TrackerServer struct {
-	Env      *bootstrap.Env
-	trackers map[string]interface{}
+	// Env      *bootstrap.Env
+	// trackers map[string]interface{}
 	// Required to be embedded for forward compatibility
 	pb.UnimplementedTrackerServiceServer
+	// pb.TrackerServiceServer
 	lock         sync.Mutex
-	sessionState string // "IDLE", "RECORDING"
+	SessionState string // "IDLE", "RECORDING"
 }
 
 // The duration the server waits after high-priority_active turns false
@@ -36,6 +35,15 @@ const CooldownDuration = 10 * time.Second
 // - put frames to temp file
 // - add record to database when status - canceled
 // - delete temp file
+
+func NewTrackerServer(s *grpc.Server) *TrackerServer {
+	server := &TrackerServer{
+		UnimplementedTrackerServiceServer: pb.UnimplementedTrackerServiceServer{},
+		SessionState:                      "IDLE",
+	}
+	pb.RegisterTrackerServiceServer(s, server)
+	return server
+}
 
 func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServer) error {
 	log.Println("New C++ client connected. Starting session watcher...")
@@ -78,9 +86,9 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 		select {
 		case <-cooldownTimer.C:
 			// Timer fired: No activity detected for CooldownDuration
-			if s.sessionState == "RECORDING" {
+			if s.SessionState == "RECORDING" {
 				log.Println("-> STATE CHANGE: RECORDING -> IDLE (Cooldown expired)")
-				s.sessionState = "IDLE"
+				s.SessionState = "IDLE"
 				// Action: Stop video archiving / web stream here
 			}
 		default:
@@ -89,22 +97,22 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 
 		// Optional: Log the state and current event count for debugging
 		log.Printf("Session: %s | Events: %d | Frame: %d",
-			s.sessionState, len(update.GetEvents()), update.GetFrameNumber())
+			s.SessionState, len(update.GetEvents()), update.GetFrameNumber())
 
 		s.lock.Unlock()
 	}
 }
 
-func (cc *TrackerServer) TestMethod(c *gin.Context) {
-	response := map[string]interface{}{
-		"success": true,
-	}
-	c.JSON(http.StatusOK, response)
-}
+// func (cc *TrackerServer) TestMethod(c *gin.Context) {
+// 	response := map[string]interface{}{
+// 		"success": true,
+// 	}
+// 	c.JSON(http.StatusOK, response)
+// }
 
-func (cc *TrackerServer) OnTrackUpdate(c *gin.Context) {
-	response := map[string]interface{}{
-		"success": true,
-	}
-	c.JSON(http.StatusOK, response)
-}
+// func (cc *TrackerServer) OnTrackUpdate(c *gin.Context) {
+// 	response := map[string]interface{}{
+// 		"success": true,
+// 	}
+// 	c.JSON(http.StatusOK, response)
+// }
