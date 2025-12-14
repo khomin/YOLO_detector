@@ -1,27 +1,39 @@
 package controller
 
 import (
+	"errors"
 	"io"
 	"log"
+	"net/http"
 	"sync"
 	"time"
+	"yolo-detector-service/bootstrap"
 	pb "yolo-detector-service/grpc/generated"
 
-	"google.golang.org/grpc"
+	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/peer"
 )
 
-// type ClientControlller struct {
-// 	Env *bootstrap.Env
-// }
+type TrackerState int
+
+const (
+	StateIdle TrackerState = iota
+	StateRun
+	StateCanceled
+)
+
+type TrackerSession struct {
+	state TrackerState
+	lock  sync.Mutex
+}
 
 type TrackerServer struct {
-	// Env      *bootstrap.Env
-	// trackers map[string]interface{}
+	Env      *bootstrap.Env
+	Trackers map[string]TrackerSession
+	lock     sync.Mutex
 	// Required to be embedded for forward compatibility
 	pb.UnimplementedTrackerServiceServer
-	// pb.TrackerServiceServer
-	lock         sync.Mutex
-	SessionState string // "IDLE", "RECORDING"
 }
 
 // The duration the server waits after high-priority_active turns false
@@ -36,15 +48,6 @@ const CooldownDuration = 10 * time.Second
 // - add record to database when status - canceled
 // - delete temp file
 
-func NewTrackerServer(s *grpc.Server) *TrackerServer {
-	server := &TrackerServer{
-		UnimplementedTrackerServiceServer: pb.UnimplementedTrackerServiceServer{},
-		SessionState:                      "IDLE",
-	}
-	pb.RegisterTrackerServiceServer(s, server)
-	return server
-}
-
 func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServer) error {
 	log.Println("New C++ client connected. Starting session watcher...")
 
@@ -53,14 +56,27 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 	cooldownTimer := time.NewTimer(0)
 	cooldownTimer.Stop() // Stop immediately; will be reset on first activity
 
+	p, ok := peer.FromContext(stream.Context())
+	if !ok {
+		return errors.New("peer information unavailable")
+	}
+
+	addr := p.Addr.String()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	session, ok := s.Trackers[addr]
+	if !ok {
+		session = TrackerSession{}
+		s.Trackers[addr] = session
+	}
+
 	// Main loop to continuously read messages from the C++ client
 	for {
 		update, err := stream.Recv()
 
-		// Handle stream closure (Client calls WritesDone())
 		if err == io.EOF {
 			log.Println("C++ client stream finished. Shutting down session.")
-			// Send the final status back to the C++ client
 			success := true
 			return stream.SendAndClose(&pb.StreamStatus{Success: &success})
 		}
@@ -70,17 +86,7 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 		}
 
 		s.lock.Lock()
-
-		// 1. Check for High-Priority Activity (e.g., Dog detected)
-		// if update.GetHighPriorityActive() {
-		// 	if s.sessionState == "IDLE" {
-		// 		log.Println("-> STATE CHANGE: IDLE -> RECORDING (High priority event)")
-		// 		s.sessionState = "RECORDING"
-		// 		// Action: Start video archiving / web stream here
-		// 	}
-		// 	// Reset the cooldown timer whenever activity is detected
-		// 	cooldownTimer.Reset(CooldownDuration)
-		// }
+		defer s.lock.Unlock()
 
 		// 2. Check for Cooldown Expiration
 		select {
@@ -95,24 +101,35 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 			// Timer has not fired (or was just reset). Do nothing.
 		}
 
-		// Optional: Log the state and current event count for debugging
-		log.Printf("Session: %s | Events: %d | Frame: %d",
-			s.SessionState, len(update.GetEvents()), update.GetFrameNumber())
+		events := update.GetEvents()
+		logrus.Print(events)
 
-		s.lock.Unlock()
+		// events[0].
+		// update.
+
+		update.GetFrameNumber()
+
+		// Optional: Log the state and current event count for debugging
+		// log.Printf("Session: %s | Events: %d | Frame: %d",
+		// 	s.SessionState, len(update.GetEvents()), update.GetFrameNumber())
+
 	}
 }
 
-// func (cc *TrackerServer) TestMethod(c *gin.Context) {
-// 	response := map[string]interface{}{
-// 		"success": true,
-// 	}
-// 	c.JSON(http.StatusOK, response)
-// }
+func (cc *TrackerServer) TestMethod(c *gin.Context) {
+	response := map[string]interface{}{
+		"success": true,
+	}
+	c.JSON(http.StatusOK, response)
+}
 
-// func (cc *TrackerServer) OnTrackUpdate(c *gin.Context) {
-// 	response := map[string]interface{}{
-// 		"success": true,
-// 	}
-// 	c.JSON(http.StatusOK, response)
-// }
+func (cc *TrackerServer) OnTrackUpdate(c *gin.Context) {
+	response := map[string]interface{}{
+		"success": true,
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (s *TrackerSession) DD() {
+
+}
