@@ -177,6 +177,7 @@ type FrameUpdate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Events        []*TrackEvent          `protobuf:"bytes,1,rep,name=events" json:"events,omitempty"`
 	FrameNumber   *int32                 `protobuf:"varint,2,opt,name=frame_number,json=frameNumber" json:"frame_number,omitempty"`
+	EncodedFrame  []byte                 `protobuf:"bytes,3,opt,name=encoded_frame,json=encodedFrame" json:"encoded_frame,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -223,6 +224,13 @@ func (x *FrameUpdate) GetFrameNumber() int32 {
 		return *x.FrameNumber
 	}
 	return 0
+}
+
+func (x *FrameUpdate) GetEncodedFrame() []byte {
+	if x != nil {
+		return x.EncodedFrame
+	}
+	return nil
 }
 
 type StreamStatus struct {
@@ -298,10 +306,11 @@ const file_tracker_proto_rawDesc = "" +
 	"\n" +
 	"confidence\x18\x05 \x01(\x02R\n" +
 	"confidence\x12!\n" +
-	"\ftimestamp_ms\x18\x06 \x01(\x03R\vtimestampMs\"]\n" +
+	"\ftimestamp_ms\x18\x06 \x01(\x03R\vtimestampMs\"\x82\x01\n" +
 	"\vFrameUpdate\x12+\n" +
 	"\x06events\x18\x01 \x03(\v2\x13.tracker.TrackEventR\x06events\x12!\n" +
-	"\fframe_number\x18\x02 \x01(\x05R\vframeNumber\"B\n" +
+	"\fframe_number\x18\x02 \x01(\x05R\vframeNumber\x12#\n" +
+	"\rencoded_frame\x18\x03 \x01(\fR\fencodedFrame\"B\n" +
 	"\fStreamStatus\x12\x18\n" +
 	"\asuccess\x18\x01 \x02(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage2P\n" +

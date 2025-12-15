@@ -953,6 +953,7 @@ class FrameUpdate final : public ::google::protobuf::Message
   // accessors -------------------------------------------------------
   enum : int {
     kEventsFieldNumber = 1,
+    kEncodedFrameFieldNumber = 3,
     kFrameNumberFieldNumber = 2,
   };
   // repeated .tracker.TrackEvent events = 1;
@@ -972,6 +973,22 @@ class FrameUpdate final : public ::google::protobuf::Message
   const ::tracker::TrackEvent& events(int index) const;
   ::tracker::TrackEvent* PROTOBUF_NONNULL add_events();
   const ::google::protobuf::RepeatedPtrField<::tracker::TrackEvent>& events() const;
+  // optional bytes encoded_frame = 3;
+  bool has_encoded_frame() const;
+  void clear_encoded_frame() ;
+  const ::std::string& encoded_frame() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_encoded_frame(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_encoded_frame();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_encoded_frame();
+  void set_allocated_encoded_frame(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_encoded_frame() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_encoded_frame(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_encoded_frame();
+
+  public:
   // optional int32 frame_number = 2;
   bool has_frame_number() const;
   void clear_frame_number() ;
@@ -987,7 +1004,7 @@ class FrameUpdate final : public ::google::protobuf::Message
  private:
   class _Internal;
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<1, 2,
+  static const ::google::protobuf::internal::TcParseTable<2, 3,
                                    1, 0,
                                    2>
       _table_;
@@ -1010,6 +1027,7 @@ class FrameUpdate final : public ::google::protobuf::Message
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::RepeatedPtrField< ::tracker::TrackEvent > events_;
+    ::google::protobuf::internal::ArenaStringPtr encoded_frame_;
     ::int32_t frame_number_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -1486,13 +1504,13 @@ FrameUpdate::_internal_mutable_events() {
 
 // optional int32 frame_number = 2;
 inline bool FrameUpdate::has_frame_number() const {
-  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  bool value = (_impl_._has_bits_[0] & 0x00000002u) != 0;
   return value;
 }
 inline void FrameUpdate::clear_frame_number() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.frame_number_ = 0;
-  _impl_._has_bits_[0] &= ~0x00000001u;
+  _impl_._has_bits_[0] &= ~0x00000002u;
 }
 inline ::int32_t FrameUpdate::frame_number() const {
   // @@protoc_insertion_point(field_get:tracker.FrameUpdate.frame_number)
@@ -1500,7 +1518,7 @@ inline ::int32_t FrameUpdate::frame_number() const {
 }
 inline void FrameUpdate::set_frame_number(::int32_t value) {
   _internal_set_frame_number(value);
-  _impl_._has_bits_[0] |= 0x00000001u;
+  _impl_._has_bits_[0] |= 0x00000002u;
   // @@protoc_insertion_point(field_set:tracker.FrameUpdate.frame_number)
 }
 inline ::int32_t FrameUpdate::_internal_frame_number() const {
@@ -1510,6 +1528,75 @@ inline ::int32_t FrameUpdate::_internal_frame_number() const {
 inline void FrameUpdate::_internal_set_frame_number(::int32_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.frame_number_ = value;
+}
+
+// optional bytes encoded_frame = 3;
+inline bool FrameUpdate::has_encoded_frame() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  return value;
+}
+inline void FrameUpdate::clear_encoded_frame() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.encoded_frame_.ClearToEmpty();
+  _impl_._has_bits_[0] &= ~0x00000001u;
+}
+inline const ::std::string& FrameUpdate::encoded_frame() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:tracker.FrameUpdate.encoded_frame)
+  return _internal_encoded_frame();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void FrameUpdate::set_encoded_frame(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_._has_bits_[0] |= 0x00000001u;
+  _impl_.encoded_frame_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:tracker.FrameUpdate.encoded_frame)
+}
+inline ::std::string* PROTOBUF_NONNULL FrameUpdate::mutable_encoded_frame()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::std::string* _s = _internal_mutable_encoded_frame();
+  // @@protoc_insertion_point(field_mutable:tracker.FrameUpdate.encoded_frame)
+  return _s;
+}
+inline const ::std::string& FrameUpdate::_internal_encoded_frame() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.encoded_frame_.Get();
+}
+inline void FrameUpdate::_internal_set_encoded_frame(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_._has_bits_[0] |= 0x00000001u;
+  _impl_.encoded_frame_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL FrameUpdate::_internal_mutable_encoded_frame() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_._has_bits_[0] |= 0x00000001u;
+  return _impl_.encoded_frame_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE FrameUpdate::release_encoded_frame() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:tracker.FrameUpdate.encoded_frame)
+  if ((_impl_._has_bits_[0] & 0x00000001u) == 0) {
+    return nullptr;
+  }
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  auto* released = _impl_.encoded_frame_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.encoded_frame_.Set("", GetArena());
+  }
+  return released;
+}
+inline void FrameUpdate::set_allocated_encoded_frame(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+  _impl_.encoded_frame_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.encoded_frame_.IsDefault()) {
+    _impl_.encoded_frame_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:tracker.FrameUpdate.encoded_frame)
 }
 
 // -------------------------------------------------------------------

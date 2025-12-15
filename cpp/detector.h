@@ -33,7 +33,8 @@ private:
     void send_result(
         std::vector<cv::Rect>& detections,
         std::vector<int>& det_class_ids,
-        std::vector<float>& det_confidences
+        std::vector<float>& det_confidences,
+        cv::Mat& frame
      );
 
     void process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& outs, const std::vector<cv::Scalar>& colors,

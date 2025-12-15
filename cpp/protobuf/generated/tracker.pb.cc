@@ -118,6 +118,9 @@ inline constexpr FrameUpdate::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
         events_{},
+        encoded_frame_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
         frame_number_{0} {}
 
 template <typename>
@@ -175,10 +178,12 @@ const ::uint32_t
         4,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_._has_bits_),
-        5, // hasbit index offset
+        6, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.events_),
         PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.frame_number_),
+        PROTOBUF_FIELD_OFFSET(::tracker::FrameUpdate, _impl_.encoded_frame_),
         ~0u,
+        1,
         0,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::tracker::StreamStatus, _impl_._has_bits_),
@@ -194,7 +199,7 @@ static const ::_pbi::MigrationSchema
         {0, sizeof(::tracker::BoundingBox)},
         {11, sizeof(::tracker::TrackEvent)},
         {26, sizeof(::tracker::FrameUpdate)},
-        {33, sizeof(::tracker::StreamStatus)},
+        {35, sizeof(::tracker::StreamStatus)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::tracker::_BoundingBox_default_instance_._instance,
@@ -210,18 +215,19 @@ const char descriptor_table_protodef_tracker_2eproto[] ABSL_ATTRIBUTE_SECTION_VA
     "d\030\001 \002(\005\022\022\n\nclass_name\030\002 \002(\t\022!\n\003box\030\003 \002(\013"
     "2\024.tracker.BoundingBox\022\020\n\010class_id\030\004 \001(\005"
     "\022\022\n\nconfidence\030\005 \001(\002\022\024\n\014timestamp_ms\030\006 \001"
-    "(\003\"H\n\013FrameUpdate\022#\n\006events\030\001 \003(\0132\023.trac"
-    "ker.TrackEvent\022\024\n\014frame_number\030\002 \001(\005\"0\n\014"
-    "StreamStatus\022\017\n\007success\030\001 \002(\010\022\017\n\007message"
-    "\030\002 \001(\t2P\n\016TrackerService\022>\n\rStreamUpdate"
-    "s\022\024.tracker.FrameUpdate\032\025.tracker.Stream"
-    "Status(\001B\016Z\014.;tracker_pb"
+    "(\003\"_\n\013FrameUpdate\022#\n\006events\030\001 \003(\0132\023.trac"
+    "ker.TrackEvent\022\024\n\014frame_number\030\002 \001(\005\022\025\n\r"
+    "encoded_frame\030\003 \001(\014\"0\n\014StreamStatus\022\017\n\007s"
+    "uccess\030\001 \002(\010\022\017\n\007message\030\002 \001(\t2P\n\016Tracker"
+    "Service\022>\n\rStreamUpdates\022\024.tracker.Frame"
+    "Update\032\025.tracker.StreamStatus(\001B\016Z\014.;tra"
+    "cker_pb"
 };
 static ::absl::once_flag descriptor_table_tracker_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_tracker_2eproto = {
     false,
     false,
-    464,
+    487,
     descriptor_table_protodef_tracker_2eproto,
     "tracker.proto",
     &descriptor_table_tracker_2eproto_once,
@@ -1000,7 +1006,8 @@ PROTOBUF_NDEBUG_INLINE FrameUpdate::Impl_::Impl_(
     const ::tracker::FrameUpdate& from_msg)
       : _has_bits_{from._has_bits_},
         _cached_size_{0},
-        events_{visibility, arena, from.events_} {}
+        events_{visibility, arena, from.events_},
+        encoded_frame_(arena, from.encoded_frame_) {}
 
 FrameUpdate::FrameUpdate(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -1023,7 +1030,8 @@ PROTOBUF_NDEBUG_INLINE FrameUpdate::Impl_::Impl_(
     ::google::protobuf::internal::InternalVisibility visibility,
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
       : _cached_size_{0},
-        events_{visibility, arena} {}
+        events_{visibility, arena},
+        encoded_frame_(arena) {}
 
 inline void FrameUpdate::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
@@ -1037,6 +1045,7 @@ inline void FrameUpdate::SharedDtor(MessageLite& self) {
   FrameUpdate& this_ = static_cast<FrameUpdate&>(self);
   this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
   ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.encoded_frame_.Destroy();
   this_._impl_.~Impl_();
 }
 
@@ -1053,7 +1062,7 @@ constexpr auto FrameUpdate::InternalNewImpl_() {
                   ::google::protobuf::Message::internal_visibility()),
   });
   if (arena_bits.has_value()) {
-    return ::google::protobuf::internal::MessageCreator::ZeroInit(
+    return ::google::protobuf::internal::MessageCreator::CopyInit(
         sizeof(FrameUpdate), alignof(FrameUpdate), *arena_bits);
   } else {
     return ::google::protobuf::internal::MessageCreator(&FrameUpdate::PlacementNew_,
@@ -1095,16 +1104,16 @@ FrameUpdate::GetClassData() const {
   return FrameUpdate_class_data_.base();
 }
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<1, 2, 1, 0, 2>
+const ::_pbi::TcParseTable<2, 3, 1, 0, 2>
 FrameUpdate::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_._has_bits_),
     0, // no _extensions_
-    2, 8,  // max_field_number, fast_idx_mask
+    3, 24,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967292,  // skipmap
+    4294967288,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    2,  // num_field_entries
+    3,  // num_field_entries
     1,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     FrameUpdate_class_data_.base(),
@@ -1114,12 +1123,16 @@ FrameUpdate::_table_ = {
     ::_pbi::TcParser::GetTable<::tracker::FrameUpdate>(),  // to_prefetch
     #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
   }, {{
-    // optional int32 frame_number = 2;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(FrameUpdate, _impl_.frame_number_), 0>(),
-     {16, 0, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_)}},
+    {::_pbi::TcParser::MiniParse, {}},
     // repeated .tracker.TrackEvent events = 1;
     {::_pbi::TcParser::FastMtR1,
      {10, 63, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.events_)}},
+    // optional int32 frame_number = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(FrameUpdate, _impl_.frame_number_), 1>(),
+     {16, 1, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_)}},
+    // optional bytes encoded_frame = 3;
+    {::_pbi::TcParser::FastBS1,
+     {26, 0, 0, PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.encoded_frame_)}},
   }}, {{
     65535, 65535
   }}, {{
@@ -1127,8 +1140,11 @@ FrameUpdate::_table_ = {
     {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.events_), -1, 0,
     (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
     // optional int32 frame_number = 2;
-    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_), _Internal::kHasBitsOffset + 0, 0,
+    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.frame_number_), _Internal::kHasBitsOffset + 1, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kInt32)},
+    // optional bytes encoded_frame = 3;
+    {PROTOBUF_FIELD_OFFSET(FrameUpdate, _impl_.encoded_frame_), _Internal::kHasBitsOffset + 0, 0,
+    (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
   }},
   {{
       {::_pbi::TcParser::GetTable<::tracker::TrackEvent>()},
@@ -1144,6 +1160,10 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
   (void) cached_has_bits;
 
   _impl_.events_.Clear();
+  cached_has_bits = _impl_._has_bits_[0];
+  if ((cached_has_bits & 0x00000001u) != 0) {
+    _impl_.encoded_frame_.ClearNonDefaultToEmpty();
+  }
   _impl_.frame_number_ = 0;
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
@@ -1177,10 +1197,16 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
 
   cached_has_bits = this_._impl_._has_bits_[0];
   // optional int32 frame_number = 2;
-  if ((cached_has_bits & 0x00000001u) != 0) {
+  if ((cached_has_bits & 0x00000002u) != 0) {
     target =
         ::google::protobuf::internal::WireFormatLite::WriteInt32ToArrayWithField<2>(
             stream, this_._internal_frame_number(), target);
+  }
+
+  // optional bytes encoded_frame = 3;
+  if ((cached_has_bits & 0x00000001u) != 0) {
+    const ::std::string& _s = this_._internal_encoded_frame();
+    target = stream->WriteBytesMaybeAliased(3, _s, target);
   }
 
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
@@ -1216,10 +1242,15 @@ PROTOBUF_NOINLINE void FrameUpdate::Clear() {
       }
     }
   }
-   {
-    // optional int32 frame_number = 2;
-    cached_has_bits = this_._impl_._has_bits_[0];
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if ((cached_has_bits & 0x00000003u) != 0) {
+    // optional bytes encoded_frame = 3;
     if ((cached_has_bits & 0x00000001u) != 0) {
+      total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
+                                      this_._internal_encoded_frame());
+    }
+    // optional int32 frame_number = 2;
+    if ((cached_has_bits & 0x00000002u) != 0) {
       total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
           this_._internal_frame_number());
     }
@@ -1239,8 +1270,13 @@ void FrameUpdate::MergeImpl(::google::protobuf::MessageLite& to_msg, const ::goo
   _this->_internal_mutable_events()->MergeFrom(
       from._internal_events());
   cached_has_bits = from._impl_._has_bits_[0];
-  if ((cached_has_bits & 0x00000001u) != 0) {
-    _this->_impl_.frame_number_ = from._impl_.frame_number_;
+  if ((cached_has_bits & 0x00000003u) != 0) {
+    if ((cached_has_bits & 0x00000001u) != 0) {
+      _this->_internal_set_encoded_frame(from._internal_encoded_frame());
+    }
+    if ((cached_has_bits & 0x00000002u) != 0) {
+      _this->_impl_.frame_number_ = from._impl_.frame_number_;
+    }
   }
   _this->_impl_._has_bits_[0] |= cached_has_bits;
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
@@ -1263,9 +1299,12 @@ PROTOBUF_NOINLINE bool FrameUpdate::IsInitializedImpl(
 
 void FrameUpdate::InternalSwap(FrameUpdate* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
   using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   _impl_.events_.InternalSwap(&other->_impl_.events_);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.encoded_frame_, &other->_impl_.encoded_frame_, arena);
   swap(_impl_.frame_number_, other->_impl_.frame_number_);
 }
 

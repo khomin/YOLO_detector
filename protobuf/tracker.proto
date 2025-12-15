@@ -27,6 +27,7 @@ message TrackEvent {
 message FrameUpdate {
     repeated TrackEvent events = 1;
     optional int32 frame_number = 2;
+    optional bytes encoded_frame = 3;
 }
 
 message StreamStatus {

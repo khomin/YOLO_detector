@@ -36,9 +36,8 @@ func main() {
 
 	tracker := &controller.TrackerServer{
 		UnimplementedTrackerServiceServer: pb.UnimplementedTrackerServiceServer{},
-		SessionState:                      "IDLE",
 		Env:                               env,
-		Trackers:                          map[string]interface{}{},
+		Trackers:                          make(map[string]*controller.TrackerSession),
 	}
 	pb.RegisterTrackerServiceServer(grpcServer, tracker)
 

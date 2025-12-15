@@ -161,7 +161,7 @@ int Detector::run() {
 
         frame_count_++; // Increment the counter
 
-        send_result(detections, det_class_ids, det_confidences);
+        send_result(detections, det_class_ids, det_confidences, frame);
 
         // --- Display ---
         imshow("YOLOv5 C++ Detection (ThinkPad T14) - Kalman Smoothed", frame);
@@ -174,13 +174,26 @@ int Detector::run() {
 
 void Detector::send_result(std::vector<cv::Rect>& detections,
                            std::vector<int>& det_class_ids,
-                           std::vector<float>& det_confidences) {
+                           std::vector<float>& det_confidences,
+                           cv::Mat& frame) {
     if (detections.size() != det_class_ids.size() || detections.size() != det_confidences.size()) {
         std::cerr << "Error: Detection result vectors have mismatched sizes." << std::endl;
         return;
     }
     tracker::FrameUpdate frame_update;
     frame_update.set_frame_number(frame_count_);
+
+    std::vector<uchar> buffer;
+    std::vector<int> compression_params;
+    // Optional: set JPEG quality (0-100), default is 95.
+    // Lower quality saves bandwidth.
+    compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
+    compression_params.push_back(80);
+
+    auto ok = cv::imencode(".jpeg", frame, buffer, compression_params);
+    if(ok) {
+        frame_update.set_encoded_frame(buffer.data(), buffer.size());
+    }
 
     for (size_t i = 0; i < detections.size(); ++i) {
         const cv::Rect& rect = detections[i];
