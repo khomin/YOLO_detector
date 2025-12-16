@@ -1,4 +1,5 @@
 #include "network_client.h"
+#include <thread>
 
 NetworkClient::NetworkClient(std::string ip, int port) {
     // 1. Create a Channel to the Go server (using insecure credentials for local setup)
@@ -47,6 +48,7 @@ bool NetworkClient::startStreaming() {
         std::cerr << "ERROR: Failed to create ClientWriter for stream." << std::endl;
         return false;
     }
+//    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     return true;
 }
 
