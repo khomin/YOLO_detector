@@ -6,14 +6,15 @@ import (
 )
 
 type Env struct {
-	APP_ENV           string `mapstructure:"APP_ENV"`
-	LOG_PATH          string `mapstructure:"LOG_PATH"`
-	REST_IP           string `mapstructure:"REST_IP"`
-	REST_PORT         string `mapstructure:"REST_PORT"`
-	EVENT_SERVER_IP   string `mapstructure:"EVENT_SERVER_IP"`
-	EVENT_SERVER_PORT string `mapstructure:"EVENT_SERVER_PORT"`
-	DB_HOST           string `mapstructure:"DB_HOST"`
-	DB_NAME           string `mapstructure:"DB_NAME"`
+	APP_ENV                 string `mapstructure:"APP_ENV"`
+	LOG_PATH                string `mapstructure:"LOG_PATH"`
+	REST_IP                 string `mapstructure:"REST_IP"`
+	REST_PORT               string `mapstructure:"REST_PORT"`
+	EVENT_SERVER_IP         string `mapstructure:"EVENT_SERVER_IP"`
+	EVENT_SERVER_PORT       string `mapstructure:"EVENT_SERVER_PORT"`
+	SESSION_START_DELAY_SEC int    `mapstructure:"SESSION_START_DELAY_SEC"`
+	DB_HOST                 string `mapstructure:"DB_HOST"`
+	DB_NAME                 string `mapstructure:"DB_NAME"`
 }
 
 func NewEnv(configPath string) *Env {

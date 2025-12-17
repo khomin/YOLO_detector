@@ -69,7 +69,7 @@ int Detector::run() {
 
     std::vector<Tracker> trackers;
 
-//    auto start = std::chrono::steady_clock::now();
+//      auto start = std::chrono::steady_clock::now();
 
     while (cap.read(frame)) {
 //        auto key = cv::waitKey(1);

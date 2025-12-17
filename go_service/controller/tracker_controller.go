@@ -32,7 +32,6 @@ type TrackerSession struct {
 	gstCmd   *exec.Cmd
 	gstIn    io.WriteCloser
 	lock     sync.Mutex
-	count    int
 }
 
 type TrackerServer struct {
@@ -57,7 +56,6 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 	if !ok {
 		return errors.New("peer information unavailable")
 	}
-
 	addr := p.Addr.String()
 	logrus.Printf("New C++ client connected [%s]", addr)
 
@@ -78,20 +76,22 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 	switch sessionPtr.state {
 	case StateIdle:
 		sessionPtr.state = StateRun
-		sessionPtr.timer = time.NewTicker(time.Duration(1 * time.Second))
+		sessionPtr.timer = time.NewTicker(time.Duration(s.Env.SESSION_START_DELAY_SEC) * time.Second)
 		if err := sessionPtr.startGStreamerPipeline(addr); err != nil {
 			logrus.Printf("Failed to start GStreamer for %s: %v", addr, err)
-			return err // Close the gRPC connection on failure
+			return err
 		}
 		go func() {
 			for {
 				select {
 				case <-sessionPtr.timer.C:
 					logrus.Printf("[%s] Session timer ticked.", addr)
-				case <-sessionPtr.doneChan: // Assuming you add a DoneChan to TrackerSession
+				case <-sessionPtr.doneChan:
 					logrus.Printf("[%s] Session cleanup signal received. Stopping ticker.", addr)
+					s.lock.Lock()
+					defer s.lock.Unlock()
+					delete(s.Trackers, addr)
 					sessionPtr.closeSession()
-
 					return
 				}
 			}
@@ -108,7 +108,7 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 				logrus.Printf("Error receiving frame update: %v", err)
 				return err
 			}
-			sessionPtr.ProcessUpdate(update)
+			sessionPtr.processUpdate(update)
 		}
 	case StateRun:
 		break
@@ -118,19 +118,13 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 	return nil
 }
 
-func (cc *TrackerSession) ProcessUpdate(update *pb.FrameUpdate) {
-	//
-	// events := update.GetEvents()
-	// frameNum := update.GetFrameNumber()
+func (cc *TrackerSession) processUpdate(update *pb.FrameUpdate) {
 	frame := update.EncodedFrame
+	for _, event := range update.Events {
+		logrus.Printf("Event: classId=%d, className=%s", *event.ClassId, *event.ClassName)
+	}
 	if len(frame) > 0 {
 		logrus.Printf("Received frame: %d, num=%d", len(frame), *update.FrameNumber)
-
-		// if cc.count >= 2 {
-		// 	cc.gstIn.Close()
-		// 	return
-		// }
-		// cc.count++
 		n, err := cc.gstIn.Write(frame)
 		if err != nil {
 			logrus.Errorf("Error writing frame to GStreamer stdin: %v", err)
