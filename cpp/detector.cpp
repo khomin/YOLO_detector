@@ -69,12 +69,20 @@ int Detector::run() {
 
     std::vector<Tracker> trackers;
 
+//    auto start = std::chrono::steady_clock::now();
+
     while (cap.read(frame)) {
-        auto key = cv::waitKey(1);
-        if (key == 'q' || key == 27) { // 27 is the ASCII code for ESC
-            std::cout << "User pressed 'q' or ESC. Exiting video loop." << std::endl;
-            break;
-        }
+//        auto key = cv::waitKey(1);
+//        if (key == 'q' || key == 27) { // 27 is the ASCII code for ESC
+//            std::cout << "User pressed 'q' or ESC. Exiting video loop." << std::endl;
+//            break;
+//        }
+
+//        auto end = std::chrono::steady_clock::now();
+//        auto elapsed_seconds = std::chrono::duration<double>(start - end).count();
+//        start = end;
+//        std::cout << "Real FPS: " << (1.0 / elapsed_seconds) << std::endl;
+
         int64 time_start = cv::getTickCount();
 
         // storage for detections this frame (only filled on inference frames)

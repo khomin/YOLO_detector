@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -44,9 +43,6 @@ type TrackerServer struct {
 	pb.UnimplementedTrackerServiceServer
 }
 
-// The duration the server waits after high-priority_active turns false
-// const CooldownDuration = 10 * time.Second
-
 // stream server
 // - register streams
 // - control its status
@@ -56,17 +52,6 @@ type TrackerServer struct {
 // - add record to database when status - canceled
 // - delete temp file
 
-// 1. Check for High-Priority Activity (e.g., Dog detected)
-// if update.GetHighPriorityActive() {
-// 	if s.sessionState == "IDLE" {
-// 		log.Println("-> STATE CHANGE: IDLE -> RECORDING (High priority event)")
-// 		s.sessionState = "RECORDING"
-// 		// Action: Start video archiving / web stream here
-// 	}
-// 	// Reset the cooldown timer whenever activity is detected
-// 	cooldownTimer.Reset(CooldownDuration)
-// }
-
 func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServer) error {
 	p, ok := peer.FromContext(stream.Context())
 	if !ok {
@@ -74,7 +59,7 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 	}
 
 	addr := p.Addr.String()
-	log.Printf("New C++ client connected [%s]", addr)
+	logrus.Printf("New C++ client connected [%s]", addr)
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -95,7 +80,7 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 		sessionPtr.state = StateRun
 		sessionPtr.timer = time.NewTicker(time.Duration(1 * time.Second))
 		if err := sessionPtr.startGStreamerPipeline(addr); err != nil {
-			log.Printf("Failed to start GStreamer for %s: %v", addr, err)
+			logrus.Printf("Failed to start GStreamer for %s: %v", addr, err)
 			return err // Close the gRPC connection on failure
 		}
 		go func() {
@@ -105,7 +90,8 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 					logrus.Printf("[%s] Session timer ticked.", addr)
 				case <-sessionPtr.doneChan: // Assuming you add a DoneChan to TrackerSession
 					logrus.Printf("[%s] Session cleanup signal received. Stopping ticker.", addr)
-					sessionPtr.timer.Stop()
+					sessionPtr.closeSession()
+
 					return
 				}
 			}
@@ -113,13 +99,13 @@ func (s *TrackerServer) StreamUpdates(stream pb.TrackerService_StreamUpdatesServ
 		for {
 			update, err := stream.Recv()
 			if err == io.EOF {
-				log.Println("C++ client stream finished. Shutting down session.")
+				logrus.Println("C++ client stream finished. Shutting down session.")
 				sessionPtr.state = StateCanceled
 				success := true
 				return stream.SendAndClose(&pb.StreamStatus{Success: &success})
 			}
 			if err != nil {
-				log.Printf("Error receiving frame update: %v", err)
+				logrus.Printf("Error receiving frame update: %v", err)
 				return err
 			}
 			sessionPtr.ProcessUpdate(update)
@@ -138,7 +124,7 @@ func (cc *TrackerSession) ProcessUpdate(update *pb.FrameUpdate) {
 	// frameNum := update.GetFrameNumber()
 	frame := update.EncodedFrame
 	if len(frame) > 0 {
-		logrus.Printf("Received frame: %d", len(frame))
+		logrus.Printf("Received frame: %d, num=%d", len(frame), *update.FrameNumber)
 
 		// if cc.count >= 2 {
 		// 	cc.gstIn.Close()
@@ -160,20 +146,6 @@ func (cc *TrackerSession) ProcessUpdate(update *pb.FrameUpdate) {
 }
 
 func (s *TrackerSession) startGStreamerPipeline(addr string) error {
-	// pipeline := "appsrc name=mysource is-live=true block=true format=3 ! image/jpeg ! jpegdec ! videoconvert ! autovideosink"
-	// pipeline := "appsrc name=mysource ! image/jpeg ! jpegdec ! videoconvert ! x264enc tune=zerolatency bitrate=500 speed-preset=ultrafast ! mp4mux ! queue leaky=downstream max-size-buffers=1 ! filesink location=/home/khomin/Desktop/capture1.mp4"
-
-	// pipeline := "appsrc name=mysource is-live=true format=3 ! image/jpeg ! jpegdec ! videoconvert ! fakesink"
-	// pipeline := "appsrc name=mysource is-live=true format=3 do-timestamp=true ! image/jpeg ! multipartmux ! fakesink sync=false"
-
-	// pipeline := "videotestsrc ! autovideosink"
-
-	// args := []string{
-	// 	"videotestsrc",
-	// 	"!",
-	// 	"autovideosink",
-	// }
-
 	args := []string{
 		// "fdsrc",
 		// "!",
@@ -198,7 +170,6 @@ func (s *TrackerSession) startGStreamerPipeline(addr string) error {
 		// "filesink", "location=/home/khomin/Desktop/capture1.mp4", //, "sync=false",
 
 		// "fdsrc",
-
 		// // 2. Define Input Caps (CRITICAL)
 		// // You must tell GStreamer this is JPEG and invent a framerate (e.g., 25 or 30 fps)
 		// // otherwise x264enc will refuse to start.
@@ -227,43 +198,69 @@ func (s *TrackerSession) startGStreamerPipeline(addr string) error {
 		// // 9. Write to File
 		// "!", "filesink", "location=/home/khomin/Desktop/capture1.mp4", //"sync=false",
 
-		// #
+		// // #
+		// "fdsrc", "do-timestamp=true", // Reads from the pipe (your Go .Write calls)
+		// "!",
+		// "image/jpeg,framerate=30/1", // Tell GStreamer what the bytes are (CAPS ARE CRITICAL HERE)
+		// "!",
+		// "jpegparse", // robustly finds the start/end of JPEGs in the byte stream
+		// "!",
+		// "multipartmux", // wraps them into a playable MJPEG stream
+		// "!",
+		// "filesink", "location=/home/khomin/Desktop/capture_fixed.mjpeg", "sync=false",
 
-		"fdsrc", "do-timestamp=true", // Reads from the pipe (your Go .Write calls)
-		"!",
-		"image/jpeg,framerate=30/1", // Tell GStreamer what the bytes are (CAPS ARE CRITICAL HERE)
-		"!",
-		"jpegparse", // robustly finds the start/end of JPEGs in the byte stream
-		"!",
-		"multipartmux", // wraps them into a playable MJPEG stream
-		"!",
-		"filesink", "location=/home/khomin/Desktop/capture_fixed.mjpeg", "sync=false",
+		// // # gemini pro already better
+		// "fdsrc", "do-timestamp=true",
+		// "!",
+		// "image/jpeg,framerate=5/1", // 1. Assume input is roughly 10 fps
+		// "!",
+		// "jpegparse",
+		// "!",
+		// "jpegdec", // 2. Decode so we can fix the timing
+		// "!",
+		// "videorate", // 3. SMOOTHING MAGIC: Fills gaps to make it steady
+		// "!",
+		// "video/x-raw,framerate=25/1", // 4. Output a standard 30fps stream (repeating frames if needed)
+		// "!",
+		// "jpegenc", // 5. Re-encode to JPEG (fast)
+		// "!",
+		// "multipartmux",
+		// "!",
+		// "filesink", "location=/home/khomin/Desktop/capture_fixed.mjpeg", "sync=false",
 
-		// "appsrc", "name=mysource", "is-live=true", "format=3", "emit-signals=false",
-		// "!",
-		// "image/jpeg",
-		// "!",
-		// "filesink", "location=/home/khomin/Desktop/capture1.jpeg", "buffer-mode=0",
+		// "fdsrc", "do-timestamp=true",
+		// "!", "image/jpeg",
+		// "!", "jpegparse", // Fixes the green corruption (frame assembly)
 
-		// 	"appsrc",
-		// 	"name=mysource",
-		// 	"!",
-		// 	"image/jpeg",
-		// 	"!",
-		// 	"filesink", "location=/home/khomin/Desktop/capture1.jpeg",
+		// // 2. DECODE: We must decode to raw video to fix the timing
+		// "!", "jpegdec",
 
-		// "jpegdec",
-		// "!",
-		// "videoconvert",
-		// "!",
-		// "x264enc",
-		// "tune=zerolatency",
-		// "!",
-		// "mp4mux",
-		// "!",
-		// "queue", "leaky=downstream", "max-size-buffers=100",
-		// "!",
-		// "filesink","location=/home/khomin/Desktop/capture1.mp4",
+		// // 3. THE GEARBOX: Fixes the "Time Lapse" / "Fast Forward" issue
+		// "!", "videorate",
+
+		// // 4. THE TARGET: Force the stream to become rigid 30fps
+		// // GStreamer will now duplicate your 7 frames into 30 frames per second
+		// "!", "video/x-raw,framerate=30/1",
+
+		// // 5. ENCODE: Now we have a perfect stream for x264
+		// "!", "videoconvert",
+		// "!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+		// "!", "h264parse",
+		// "!", "mp4mux",
+		// "!", "filesink", "location=/home/khomin/Desktop/capture_fixed.mp4", "sync=false",
+
+		"fdsrc", "do-timestamp=true",
+		"!", "image/jpeg",
+		"!", "jpegparse",
+		"!", "jpegdec",
+		"!", "videoconvert",
+		"!", "videorate", // Fixes the "Too Fast" problem
+		"!", "video/x-raw,framerate=30/1",
+		"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+		"!", "h264parse",
+		// fragment-duration=2000: Write a header every 2 seconds
+		"!", "mp4mux", "fragment-duration=2000",
+		"!", "filesink", "location=/home/khomin/Desktop/capture_fixed.mp4", "sync=false",
 	}
 
 	s.gstCmd = exec.Command("gst-launch-1.0", args...)
@@ -314,15 +311,26 @@ func (s *TrackerSession) startGStreamerPipeline(addr string) error {
 	go func() {
 		if err := s.gstCmd.Wait(); err != nil {
 			// This runs if the GStreamer process exits with a non-zero code (crashed)
-			log.Printf("!!! GStreamer CRASHED or EXITED !!! Address: [%s]", addr)
-			// log.Printf("!!! Crash Reason (stderr): %s", stderr.String())
-			log.Printf("!!! Exit Error: %v", err)
+			logrus.Printf("!!! GStreamer CRASHED or EXITED !!! Address: [%s]", addr)
+			// logrus.Printf("!!! Crash Reason (stderr): %s", stderr.String())
+			logrus.Printf("!!! Exit Error: %v", err)
 			// You might want to close the gRPC connection (or send a signal) here
 		}
 	}()
 
-	log.Printf("[%s] GStreamer pipeline started", addr)
+	logrus.Printf("[%s] GStreamer pipeline started", addr)
 	return nil
+}
+
+func (cc *TrackerSession) closeSession() {
+	logrus.Println("Stopping GStreamer...")
+	cc.gstIn.Close()
+	// Wait for the process to exit naturally.
+	err := cc.gstCmd.Wait()
+	if err != nil {
+		logrus.Printf("GStreamer exited with error: %v", err)
+	}
+	logrus.Println("GStreamer finished and file saved.")
 }
 
 func (cc *TrackerServer) TestMethod(c *gin.Context) {

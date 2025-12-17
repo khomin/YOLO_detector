@@ -48,7 +48,6 @@ bool NetworkClient::startStreaming() {
         std::cerr << "ERROR: Failed to create ClientWriter for stream." << std::endl;
         return false;
     }
-//    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     return true;
 }
 
@@ -62,6 +61,8 @@ bool NetworkClient::sendUpdate(const tracker::FrameUpdate& update) {
         // This fails if the server closes the stream, the connection drops, etc.
         std::cerr << "WARNING: gRPC stream write failed. Stream may be closed." << std::endl;
         // The calling thread should now call StopStreaming() to finalize the RPC status.
+    } else {
+//        std::cout << "GOOD: gRPC sent frame len=" << update.encoded_frame().length()  << std::endl;
     }
     return success;
 }
