@@ -1,13 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
 
-set(PROJECT opencv_cpp)
+set(PROJECT yolo_opencv_cpp)
 set(BUILD_CONFIG_CXX_TESTS OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(${PROJECT} LANGUAGES CXX)
-
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/external/config-cxx)
 
@@ -42,3 +41,5 @@ target_link_libraries(${PROJECT} PUBLIC
     ${GRPC_AND_DEPS_LIBRARIES}
     config-cxx
 )
+
+target_precompile_headers(config-cxx PUBLIC "<algorithm>")

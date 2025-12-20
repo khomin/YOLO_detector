@@ -1,21 +1,26 @@
 package bootstrap
 
 import (
+	"time"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 type Env struct {
-	APP_ENV                 string `mapstructure:"APP_ENV"`
-	LOG_PATH                string `mapstructure:"LOG_PATH"`
-	REST_IP                 string `mapstructure:"REST_IP"`
-	REST_PORT               string `mapstructure:"REST_PORT"`
-	EVENT_SERVER_IP         string `mapstructure:"EVENT_SERVER_IP"`
-	EVENT_SERVER_PORT       string `mapstructure:"EVENT_SERVER_PORT"`
-	SESSION_START_DELAY_SEC int    `mapstructure:"SESSION_START_DELAY_SEC"`
-	SESSION_TIMER_SEC       int    `mapstructure:"SESSION_TIMER_SEC"`
-	DB_HOST                 string `mapstructure:"DB_HOST"`
-	DB_NAME                 string `mapstructure:"DB_NAME"`
+	APP_ENV                   string        `mapstructure:"APP_ENV"`
+	LOG_PATH                  string        `mapstructure:"LOG_PATH"`
+	RECORDINGS_TMP_DIR        string        `mapstructure:"RECORDINGS_TMP_DIR"`
+	REST_IP                   string        `mapstructure:"REST_IP"`
+	REST_PORT                 string        `mapstructure:"REST_PORT"`
+	EVENT_SERVER_IP           string        `mapstructure:"EVENT_SERVER_IP"`
+	EVENT_SERVER_PORT         string        `mapstructure:"EVENT_SERVER_PORT"`
+	SESSION_TASK_TIMER        time.Duration `mapstructure:"SESSION_TASK_TIMER"`
+	TARGET_THRESHOLD_DURATION time.Duration `mapstructure:"TARGET_THRESHOLD_DURATION"`
+	SESSION_ALLOWED_CLASSES   []string      `mapstructure:"SESSION_ALLOWED_CLASSES"`
+	DB_HOST                   string        `mapstructure:"DB_HOST"`
+	DB_NAME                   string        `mapstructure:"DB_NAME"`
+	Duration                  time.Duration `mapstructure:"duration"`
 }
 
 func NewEnv(configPath string) *Env {

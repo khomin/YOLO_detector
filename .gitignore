@@ -12,3 +12,4 @@ cpp/CMakeLists.txt.user
 .lib_pack/*
 resources/yolov5n.onnx
 log/*.log
+record_temp/*

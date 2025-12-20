@@ -15,44 +15,57 @@ type TrackerState int
 
 const (
 	StateIdle TrackerState = iota
-	StateConfirmation
 	StateRun
 	StateCanceled
 )
 
 type TrackerSession struct {
-	state        TrackerState
-	timer        *time.Ticker
-	creationTime time.Time
-	doneChan     chan struct{}
-	gstCmd       *exec.Cmd
-	gstIn        io.WriteCloser
-	lock         sync.Mutex
-	env          *bootstrap.Env
+	sessionId     int
+	state         TrackerState
+	timer         *time.Ticker
+	streamStarted time.Time
+	trackerTime   TrackerTime
+	recordCount   int
+	doneChan      chan struct{}
+	gstCmd        *exec.Cmd
+	gstIn         io.WriteCloser
+	env           *bootstrap.Env
+	lock          sync.Mutex
+}
+
+type TrackerTime struct {
+	firstEvent    *pb.TrackEvent
+	lastEvent     *pb.TrackEvent
+	env           *bootstrap.Env
+	preRecordBuff [][]byte
 }
 
 func (cc *TrackerSession) startSession(addr string, stream pb.TrackerService_StreamUpdatesServer) error {
-	cc.state = StateConfirmation
-	cc.creationTime = time.Now()
-	cc.timer = time.NewTicker(time.Duration(cc.env.SESSION_TIMER_SEC) * time.Second)
+	cc.state = StateIdle
+	cc.streamStarted = time.Now()
+	cc.timer = time.NewTicker(cc.env.SESSION_TASK_TIMER)
 	go func() {
 		for {
 			select {
 			case <-cc.timer.C:
 				logrus.Printf("[%s] Session timer ticked.", addr)
 				switch cc.state {
-				case StateConfirmation:
-					startDelay := cc.creationTime.Add(time.Duration(cc.env.SESSION_START_DELAY_SEC) * time.Second)
-					if time.Now().After(startDelay) {
+				case StateIdle:
+					cc.lock.Lock()
+					if cc.trackerTime.hasTargetFor(cc.env.TARGET_THRESHOLD_DURATION) {
+						cc.trackerTime.clear()
+						cc.startPipeline()
 						cc.state = StateRun
-						if err := cc.startGStreamerPipeline(addr); err != nil {
-							logrus.Printf("Failed to start GStreamer for %s: %v", addr, err)
-							return
-						}
 					}
+					cc.lock.Unlock()
 				case StateRun:
-					// TODO: collect data and sent pushes
-					break
+					cc.lock.Lock()
+					if cc.trackerTime.noTargetFor(cc.env.TARGET_THRESHOLD_DURATION) {
+						cc.trackerTime.clear()
+						cc.stopPipeline()
+						cc.state = StateIdle
+					}
+					cc.lock.Unlock()
 				case StateCanceled:
 					break
 				}
@@ -78,36 +91,90 @@ func (cc *TrackerSession) startSession(addr string, stream pb.TrackerService_Str
 	}
 }
 
-func (cc *TrackerSession) processUpdate(update *pb.FrameUpdate) {
-	frame := update.EncodedFrame
-	for _, event := range update.Events {
-		logrus.Printf("Event: classId=%d, className=%s", *event.ClassId, *event.ClassName)
-	}
-	if len(frame) > 0 {
-		if cc.state == StateRun {
-			logrus.Printf("Received frame: %d, num=%d", len(frame), *update.FrameNumber)
-			n, err := cc.gstIn.Write(frame)
-			if err != nil {
-				logrus.Errorf("Error writing frame to GStreamer stdin: %v", err)
-				// You may want to kill the GStreamer process and/or session here
-				return
-			}
-			if n != len(frame) {
-				logrus.Warnf("Incomplete write to GStreamer: Wrote %d of %d bytes", n, len(frame))
-			}
+func (cc *TrackerSession) closeSession() {
+	logrus.Println("Stopping GStreamer...")
+	close(cc.doneChan)
+	cc.stopPipeline()
+}
+
+func (c *TrackerTime) updateTime(events []*pb.TrackEvent) {
+	hasTarget := c.containsAllowedClass(events)
+	if hasTarget {
+		if c.firstEvent == nil {
+			c.firstEvent = events[len(events)-1]
 		}
-	} else {
-		logrus.Print("No Frame")
+		c.lastEvent = events[len(events)-1]
 	}
 }
 
-func (cc *TrackerSession) closeSession() {
-	logrus.Println("Stopping GStreamer...")
-	cc.gstIn.Close()
-	// Wait for the process to exit naturally.
-	err := cc.gstCmd.Wait()
-	if err != nil {
-		logrus.Printf("GStreamer exited with error: %v", err)
+func (c *TrackerTime) clear() {
+	c.firstEvent = nil
+	c.lastEvent = nil
+}
+
+func (cc *TrackerTime) containsAllowedClass(events []*pb.TrackEvent) bool {
+	classes := cc.env.SESSION_ALLOWED_CLASSES
+	for _, event := range events {
+		for _, name := range classes {
+			if name == *event.ClassName {
+				return true
+			}
+		}
 	}
-	logrus.Println("GStreamer finished and file saved.")
+	return false
+}
+
+func (cc *TrackerTime) hasTargetFor(duration time.Duration) bool {
+	if cc.firstEvent == nil {
+		return false
+	}
+	if time.Since(time.UnixMilli(*cc.firstEvent.TimestampMs)) > duration {
+		return true
+	}
+	return false
+}
+
+func (cc *TrackerTime) noTargetFor(duration time.Duration) bool {
+	if cc.lastEvent == nil {
+		return true
+	}
+	if time.Since(time.UnixMilli(*cc.lastEvent.TimestampMs)) > duration {
+		return true
+	}
+	return false
+}
+
+func (cc *TrackerSession) processUpdate(update *pb.FrameUpdate) {
+	cc.trackerTime.updateTime(update.Events)
+
+	if len(update.EncodedFrame) > 0 {
+		switch cc.state {
+		case StateIdle:
+			maxPreRoll := 150
+			cc.trackerTime.preRecordBuff = append(cc.trackerTime.preRecordBuff, update.EncodedFrame)
+			if len(cc.trackerTime.preRecordBuff) > maxPreRoll {
+				cc.trackerTime.preRecordBuff = cc.trackerTime.preRecordBuff[1:]
+			}
+		case StateRun:
+			if len(cc.trackerTime.preRecordBuff) > 0 {
+				for _, i := range cc.trackerTime.preRecordBuff {
+					cc.writeFrame(i)
+				}
+				cc.trackerTime.preRecordBuff = [][]byte{}
+			}
+			cc.writeFrame(update.EncodedFrame)
+		}
+	}
+}
+
+func (cc *TrackerSession) writeFrame(frame []byte) error {
+	n, err := cc.gstIn.Write(frame)
+	if err != nil {
+		logrus.Errorf("Error writing frame to GStreamer stdin: %v", err)
+		return err
+	}
+	if n != len(frame) {
+		logrus.Warnf("Incomplete write to GStreamer: Wrote %d of %d bytes", n, len(frame))
+	}
+	return nil
 }
