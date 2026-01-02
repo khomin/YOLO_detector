@@ -1,11 +1,15 @@
 #!/bin/bash
+
+ROOT_PATH=$PWD
+
 SCRIPT_PATH=$(dirname $(readlink -f $0))
+
 cd $SCRIPT_PATH
 
-echo "Using protobuf compiler:" `which protoc`
+export PATH=$PATH:$ROOT_PATH/.lib_pack/grpc/bin/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ROOT_PATH/.lib_pack/grpc/lib/
 
-export PATH=$PATH:../.lib_pack/build_grpc/x86/bin/
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/khomin/Documents/PROJECTS/YOLO_detector/.lib_pack/build_grpc/x86/lib/
+echo "Using protobuf compiler: $(which protoc)"
 
 mkdir -p ../cpp/protobuf/generated
 set -x

@@ -24,7 +24,7 @@ add_executable(${PROJECT}
 target_include_directories(${PROJECT} PUBLIC
     ${CMAKE_SOURCE_DIR}/../cpp/
     ${CMAKE_SOURCE_DIR}/../.lib_pack/opencv/include/opencv4
-    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/include
+    ${CMAKE_SOURCE_DIR}/../.lib_pack/grpc/include
 )
 
 file(GLOB OPENCV_LIBRARIES
@@ -32,7 +32,7 @@ file(GLOB OPENCV_LIBRARIES
 )
 
 file(GLOB GRPC_AND_DEPS_LIBRARIES
-    ${CMAKE_SOURCE_DIR}/../.lib_pack/build_grpc/x86/lib/*.so
+    ${CMAKE_SOURCE_DIR}/../.lib_pack/grpc/lib/*.so
 )
 
 

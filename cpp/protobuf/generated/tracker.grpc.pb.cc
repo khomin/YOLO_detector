@@ -19,7 +19,6 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/impl/service_type.h>
 #include <grpcpp/support/sync_stream.h>
-#include <grpcpp/ports_def.inc>
 namespace tracker {
 
 static const char* TrackerService_method_names[] = {
@@ -77,5 +76,4 @@ TrackerService::Service::~Service() {
 
 
 }  // namespace tracker
-#include <grpcpp/ports_undef.inc>
 
