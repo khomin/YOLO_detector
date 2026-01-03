@@ -1,3 +1,8 @@
+#!/bin/bash
+set -e
+
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Point to the cross-compiler
 export CC="aarch64-linux-gnu-gcc"
 export CXX="aarch64-linux-gnu-g++"
@@ -11,4 +16,6 @@ export GOARCH=arm64
 export CGO_CFLAGS="-I$PROJECT_ROOT/.lib_pack/grpc/include -I$PROJECT_ROOT/.lib_pack/opencv/include"
 export CGO_LDFLAGS="-L$PROJECT_ROOT/.lib_pack/grpc/lib -L$PROJECT_ROOT/.lib_pack/opencv/lib"
 
-go build -o go_service/my_service go_service/main.go
+export PATH=$PATH:/usr/local/go/bin
+
+go build -o service main.go

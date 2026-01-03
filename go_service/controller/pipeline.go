@@ -13,6 +13,26 @@ func (s *TrackerSession) startPipeline() error {
 	s.recordCount += 1
 	fileName := fmt.Sprintf("session_%04d_%03d.mp4", s.sessionId, s.recordCount)
 	path := path.Join(s.env.RECORDINGS_TMP_DIR, fileName)
+
+	// TODO: create RECORDINGS_TMP_DIR
+
+	// x264enc
+	// args := []string{
+	// 	"fdsrc", "do-timestamp=true",
+	// 	"!", "image/jpeg",
+	// 	"!", "jpegparse",
+	// 	"!", "jpegdec",
+	// 	"!", "videoconvert",
+	// 	"!", "videorate",
+	// 	"!", "video/x-raw,framerate=30/1",
+	// 	"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+	// 	"!", "h264parse",
+	// 	"!", "mp4mux", "fragment-duration=2000",
+	// 	"!", "filesink",
+	// 	"location=" + path, "sync=false",
+	// }
+
+	// x265enc
 	args := []string{
 		"fdsrc", "do-timestamp=true",
 		"!", "image/jpeg",
@@ -21,8 +41,8 @@ func (s *TrackerSession) startPipeline() error {
 		"!", "videoconvert",
 		"!", "videorate",
 		"!", "video/x-raw,framerate=30/1",
-		"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
-		"!", "h264parse",
+		"!", "x265enc", "speed-preset=ultrafast", "bitrate=2000",
+		"!", "h265parse",
 		"!", "mp4mux", "fragment-duration=2000",
 		"!", "filesink",
 		"location=" + path, "sync=false",
