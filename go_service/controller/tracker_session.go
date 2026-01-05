@@ -237,11 +237,10 @@ func (cc *TrackerSession) startWebRTC() error {
 		"!", "jpegdec",
 		"!", "videoconvert",
 		"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
-		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=15",
-		"!", "video/x-h264,profile=baseline",
-		"!", "h264parse", "config-interval=-1", // -1 means "put headers in front of every keyframe"
+		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "sliced-threads=false", "key-int-max=15",
+		"!", "video/x-h264,profile=baseline,stream-format=byte-stream",
+		"!", "h264parse", "config-interval=-1",
 		"!", "video/x-h264,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
-		// "!", "filesink", "location=/home/khomin/Desktop/test.h264",
 		"!", "fdsink", "fd=1", "sync=false",
 	}...)
 
@@ -263,8 +262,33 @@ func (cc *TrackerSession) startWebRTC() error {
 		return err
 	}
 	// 4. The Reader Loop
+	// go func() {
+	// 	// Large buffer for full frames
+	// 	reader := bufio.NewReaderSize(cc.gstWebRtcOut, 256*1024)
+	// 	for {
+	// 		// Look for the next Start Code (00 00 00 01)
+	// 		// This is a simple way: Read until we find the next start of a frame
+	// 		data, err := reader.ReadBytes(0x01)
+	// 		if err != nil {
+	// 			return
+	// 		}
+	// 		// Logic: Collect data until you have a full NAL unit.
+	// 		// For now, let's ensure we aren't dropping data.
+	// 		if len(data) > 100 {
+	// 			// Re-add the start code prefix that ReadBytes consumed
+	// 			nal := append([]byte{0x00, 0x00, 0x00, 0x01}, data...)
+
+	// 			cc.videoTrack.WriteSample(media.Sample{
+	// 				Data:     nal,
+	// 				Duration: time.Millisecond * 33,
+	// 			})
+	// 		}
+	// 	}
+	// }()
 	go func() {
 		scanner := bufio.NewScanner(cc.gstWebRtcOut)
+		buf := make([]byte, 0, 1024*1024)
+		scanner.Buffer(buf, 1024*1024)
 		scanner.Split(splitAnnexB)
 
 		var headerStack []byte // To store SPS/PPS until a real frame arrives
