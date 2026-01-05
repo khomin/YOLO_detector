@@ -1,13 +1,17 @@
 package controller
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
 	"yolo-detector-service/bootstrap"
 	pb "yolo-detector-service/grpc/generated"
 
+	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,12 +29,18 @@ type TrackerSession struct {
 	timer         *time.Ticker
 	streamStarted time.Time
 	trackerTime   TrackerTime
+	videoTrack    *webrtc.TrackLocalStaticSample
 	recordCount   int
-	doneChan      chan struct{}
-	gstCmd        *exec.Cmd
-	gstIn         io.WriteCloser
-	env           *bootstrap.Env
-	lock          sync.Mutex
+	// gstreamer webRTC pipe
+	gstWebRtcCmd *exec.Cmd
+	gstWebRtcIn  io.WriteCloser
+	gstWebRtcOut io.ReadCloser
+	// gstreamer file recording
+	gstCmd   *exec.Cmd
+	gstIn    io.WriteCloser
+	doneChan chan struct{}
+	env      *bootstrap.Env
+	lock     sync.Mutex
 }
 
 type TrackerTime struct {
@@ -38,6 +48,24 @@ type TrackerTime struct {
 	lastEvent     *pb.TrackEvent
 	env           *bootstrap.Env
 	preRecordBuff [][]byte
+}
+
+type SessionInfo struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+}
+
+func InitSession(id int, env *bootstrap.Env) *TrackerSession {
+	s := TrackerSession{
+		doneChan:  make(chan struct{}),
+		sessionId: id,
+		env:       env,
+		trackerTime: TrackerTime{
+			env: env,
+		},
+	}
+	s.startWebRTC()
+	return &s
 }
 
 func (cc *TrackerSession) startSession(addr string, stream pb.TrackerService_StreamUpdatesServer) error {
@@ -48,7 +76,7 @@ func (cc *TrackerSession) startSession(addr string, stream pb.TrackerService_Str
 		for {
 			select {
 			case <-cc.timer.C:
-				logrus.Printf("[%s] Session timer ticked.", addr)
+				// logrus.Printf("[%s] Session timer ticked.", addr)
 				switch cc.state {
 				case StateIdle:
 					cc.lock.Lock()
@@ -176,5 +204,77 @@ func (cc *TrackerSession) writeFrame(frame []byte) error {
 	if n != len(frame) {
 		logrus.Warnf("Incomplete write to GStreamer: Wrote %d of %d bytes", n, len(frame))
 	}
+	_, err = cc.gstWebRtcIn.Write(frame)
+	if err != nil {
+		fmt.Println("Error writing to track:", err)
+	}
 	return nil
+}
+
+func (cc *TrackerSession) startWebRTC() error {
+	cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
+		"fdsrc", "do-timestamp=true",
+		"!", "image/jpeg",
+		"!", "jpegparse",
+		"!", "jpegdec",
+		"!", "videoconvert",
+		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=30",
+		"!", "h264parse", "config-interval=1", // config-interval=1 is MAGIC for fixing black screens
+		"!", "video/x-h264,stream-format=byte-stream", // Ensures format is Annex-B
+		"!", "fdsink", "fd=1", "sync=false", // Output to STDOUT
+	}...)
+	stdIn, err := cc.gstWebRtcCmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
+	stdOut, err := cc.gstWebRtcCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
+	cc.gstWebRtcIn = stdIn
+	cc.gstWebRtcOut = stdOut
+	cc.gstWebRtcCmd.Stderr = os.Stderr
+	cc.gstWebRtcCmd.Stdout = os.Stdout
+
+	if err = cc.gstWebRtcCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start gst-launch: %w", err)
+	}
+	cc.videoTrack, _ = webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
+		"video",
+		"pion",
+	)
+	go func() {
+		// A simple buffer to read the H.264 stream
+		// In a production app, you'd use a more robust NAL unit splitter,
+		// but for a start, reading chunks works with many decoders.
+		buffer := make([]byte, 4096)
+		for {
+			n, err := cc.gstWebRtcCmd.Stdin.Read(buffer)
+			if err != nil {
+				break
+			}
+			if n > 0 {
+				// Push the encoded H.264 bytes to Android
+				cc.videoTrack.WriteSample(media.Sample{
+					Data:     buffer[:n],
+					Duration: time.Millisecond * 33, // Assume 30fps
+				})
+			}
+		}
+	}()
+	return nil
+}
+
+func (s TrackerState) String() string {
+	switch s {
+	case StateIdle:
+		return "Idle"
+	case StateRun:
+		return "Run"
+	case StateCanceled:
+		return "Canceled"
+	default:
+		return "Unknown"
+	}
 }

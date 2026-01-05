@@ -53,6 +53,8 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
+	router.POST("/signal/:id", tracker.HandleSignaling)
+	router.GET("/sessions", tracker.GetSessions)
 	router.POST("/v1/test", tracker.TestMethod)
 
 	logrus.Printf("REST Server listening on %s", env.REST_PORT)

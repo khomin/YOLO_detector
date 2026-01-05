@@ -49,8 +49,8 @@ int Detector::run() {
     net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 
     // 3. Initialize Camera (0 for default webcam)
-//    cv::VideoCapture cap(0);
-    cv::VideoCapture cap(1);
+    cv::VideoCapture cap(0);
+//    cv::VideoCapture cap(1);
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     if (!cap.isOpened()) {
@@ -170,7 +170,7 @@ int Detector::run() {
 
         frame_count_++; // Increment the counter
 
-//        send_result(detections, det_class_ids, det_confidences, frame);
+        send_result(detections, det_class_ids, det_confidences, frame);
 
         // --- Display ---
         imshow("YOLOv5 C++ Detection (ThinkPad T14) - Kalman Smoothed", frame);
