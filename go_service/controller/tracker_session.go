@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -212,58 +214,221 @@ func (cc *TrackerSession) writeFrame(frame []byte) error {
 }
 
 func (cc *TrackerSession) startWebRTC() error {
+	// 1. Setup the command. REMOVE stdout/stderr assignment here.
+	// cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
+	// 	"fdsrc", "do-timestamp=true",
+	// 	"!", "image/jpeg",
+	// 	"!", "jpegparse",
+	// 	"!", "jpegdec",
+	// 	"!", "videoconvert",
+	// 	"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
+	// 	"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=15", "byte-stream=true",
+	// 	"!", "video/x-h264,profile=baseline",
+	// 	"!", "h264parse", "config-interval=1",
+	// 	"!", "video/x-h264,stream-format=byte-stream",
+	// 	// "!", "filesink", "location=/home/khomin/Desktop/test.h264",
+	// 	"!", "fdsink", "fd=1", "sync=false",
+	// }...)
+
 	cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
 		"fdsrc", "do-timestamp=true",
 		"!", "image/jpeg",
 		"!", "jpegparse",
 		"!", "jpegdec",
 		"!", "videoconvert",
-		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=30",
-		"!", "h264parse", "config-interval=1", // config-interval=1 is MAGIC for fixing black screens
-		"!", "video/x-h264,stream-format=byte-stream", // Ensures format is Annex-B
-		"!", "fdsink", "fd=1", "sync=false", // Output to STDOUT
+		"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
+		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=15",
+		"!", "video/x-h264,profile=baseline",
+		"!", "h264parse", "config-interval=-1", // -1 means "put headers in front of every keyframe"
+		"!", "video/x-h264,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
+		// "!", "filesink", "location=/home/khomin/Desktop/test.h264",
+		"!", "fdsink", "fd=1", "sync=false",
 	}...)
-	stdIn, err := cc.gstWebRtcCmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdin pipe: %w", err)
-	}
-	stdOut, err := cc.gstWebRtcCmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdin pipe: %w", err)
-	}
-	cc.gstWebRtcIn = stdIn
-	cc.gstWebRtcOut = stdOut
-	cc.gstWebRtcCmd.Stderr = os.Stderr
-	cc.gstWebRtcCmd.Stdout = os.Stdout
 
-	if err = cc.gstWebRtcCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start gst-launch: %w", err)
-	}
+	// 2. Setup Pipes
+	cc.gstWebRtcIn, _ = cc.gstWebRtcCmd.StdinPipe()
+	cc.gstWebRtcOut, _ = cc.gstWebRtcCmd.StdoutPipe()
+	cc.gstWebRtcCmd.Stderr = os.Stderr // Only pipe stderr to console
+
+	// 3. Create the Track
 	cc.videoTrack, _ = webrtc.NewTrackLocalStaticSample(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
+		webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeH264,
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+		},
 		"video",
 		"pion",
 	)
+	if err := cc.gstWebRtcCmd.Start(); err != nil {
+		return err
+	}
+	// 4. The Reader Loop
 	go func() {
-		// A simple buffer to read the H.264 stream
-		// In a production app, you'd use a more robust NAL unit splitter,
-		// but for a start, reading chunks works with many decoders.
-		buffer := make([]byte, 4096)
-		for {
-			n, err := cc.gstWebRtcCmd.Stdin.Read(buffer)
-			if err != nil {
-				break
+		scanner := bufio.NewScanner(cc.gstWebRtcOut)
+		scanner.Split(splitAnnexB)
+
+		var headerStack []byte // To store SPS/PPS until a real frame arrives
+
+		for scanner.Scan() {
+			data := scanner.Bytes()
+			if len(data) == 0 {
+				continue
 			}
-			if n > 0 {
-				// Push the encoded H.264 bytes to Android
-				cc.videoTrack.WriteSample(media.Sample{
-					Data:     buffer[:n],
-					Duration: time.Millisecond * 33, // Assume 30fps
-				})
+
+			// 1. If it's a small packet (SPS/PPS/Metadata), save it.
+			if len(data) < 100 {
+				headerStack = append(headerStack, []byte{0x00, 0x00, 0x00, 0x01}...)
+				headerStack = append(headerStack, data...)
+				continue
 			}
+
+			// 2. If it's a big packet (Video Frame), attach any saved headers and send.
+			finalPacket := append([]byte{0x00, 0x00, 0x00, 0x01}, data...)
+			if len(headerStack) > 0 {
+				finalPacket = append(headerStack, finalPacket...)
+				headerStack = nil // Clear the stack
+			}
+
+			cc.videoTrack.WriteSample(media.Sample{
+				Data:     finalPacket,
+				Duration: time.Millisecond * 33,
+			})
 		}
 	}()
+	// go func() {
+	// 	// 1MB buffer to hold the incoming stream
+	// 	reader := bufio.NewReaderSize(cc.gstWebRtcOut, 1024*1024)
+
+	// 	// We look for the start code: 00 00 00 01
+	// 	// A simple trick is to Read until 0x01, then check if the previous 3 bytes were 0x00
+	// 	for {
+	// 		data, err := reader.ReadBytes(0x01)
+	// 		if err != nil {
+	// 			logrus.Errorf("GStreamer pipe closed: %v", err)
+	// 			return
+	// 		}
+
+	// 		// We found a '01'. Now we check if we have enough data to be a NAL unit
+	// 		if len(data) > 5 {
+	// 			// We strip the trailing 01 and the preceding 00s to get the raw NAL
+	// 			// Then we wrap it in a clean 4-byte start code
+	// 			cleanData := append([]byte{0x00, 0x00, 0x00, 0x01}, data[:len(data)-1]...)
+
+	// 			err = cc.videoTrack.WriteSample(media.Sample{
+	// 				Data:     cleanData,
+	// 				Duration: time.Millisecond * 33,
+	// 			})
+
+	// 			if err == nil {
+	// 				// You should see lengths like 5000-20000 here
+	// 				// If you still see len=2, the logic below is skipping them
+	// 				if len(cleanData) > 100 {
+	// 					logrus.Debugf("Sent Frame: %d bytes", len(cleanData))
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }()
+	// go func() {
+	// 	// Use a H.264 Annex-B splitter to find the 'Start Codes'
+	// 	// This ensures Pion gets whole frames/NALs
+	// 	scanner := bufio.NewScanner(cc.gstWebRtcOut)
+	// 	scanner.Split(splitAnnexB)
+	// 	for scanner.Scan() {
+	// 		data := scanner.Bytes()
+	// 		// Ignore junk
+	// 		if len(data) < 5 {
+	// 			continue
+	// 		}
+	// 		// Prefix the data with the start code that the scanner stripped
+	// 		nal := append([]byte{0x00, 0x00, 0x00, 0x01}, data...)
+
+	// 		err := cc.videoTrack.WriteSample(media.Sample{
+	// 			Data: nal,
+	// 			// Data:     data,
+	// 			Duration: time.Millisecond * 33,
+	// 		})
+	// 		if err == nil {
+	// 			logrus.Printf("write sample: len=%d", len(data))
+	// 		} else {
+	// 			logrus.Printf("write sample: len=%d, error=%w", len(data), err)
+	// 		}
+	// 	}
+	// }()
 	return nil
+}
+
+// func (cc *TrackerSession) startWebRTC() error {
+// 	cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
+// 		"fdsrc", "do-timestamp=true",
+// 		"!", "image/jpeg",
+// 		"!", "jpegparse",
+// 		"!", "jpegdec",
+// 		"!", "videoconvert",
+// 		"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "key-int-max=30",
+// 		"!", "h264parse", "config-interval=1", // config-interval=1 is MAGIC for fixing black screens
+// 		"!", "video/x-h264,stream-format=byte-stream", // Ensures format is Annex-B
+// 		"!", "fdsink", "fd=1", "sync=false", // Output to STDOUT
+// 	}...)
+// 	stdIn, err := cc.gstWebRtcCmd.StdinPipe()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get stdin pipe: %w", err)
+// 	}
+// 	stdOut, err := cc.gstWebRtcCmd.StdoutPipe()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get stdin pipe: %w", err)
+// 	}
+// 	cc.gstWebRtcIn = stdIn
+// 	cc.gstWebRtcOut = stdOut
+// 	cc.gstWebRtcCmd.Stderr = os.Stderr
+// 	// cc.gstWebRtcCmd.Stdout = os.Stdout
+
+// 	if err = cc.gstWebRtcCmd.Start(); err != nil {
+// 		return fmt.Errorf("failed to start gst-launch: %w", err)
+// 	}
+// 	cc.videoTrack, _ = webrtc.NewTrackLocalStaticSample(
+// 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
+// 		"video",
+// 		"pion",
+// 	)
+// 	go func() {
+// 		// A simple buffer to read the H.264 stream
+// 		// In a production app, you'd use a more robust NAL unit splitter,
+// 		// but for a start, reading chunks works with many decoders.
+// 		buffer := make([]byte, 4096)
+// 		for {
+// 			n, err := cc.gstWebRtcOut.Read(buffer)
+// 			if err != nil {
+// 				break
+// 			}
+// 			if n > 0 {
+// 				// Push the encoded H.264 bytes to Android
+// 				cc.videoTrack.WriteSample(media.Sample{
+// 					Data:     buffer[:n],
+// 					Duration: time.Millisecond * 33, // Assume 30fps
+// 				})
+// 			}
+// 		}
+// 	}()
+// 	return nil
+// }
+
+func splitAnnexB(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.Index(data, []byte{0x00, 0x00, 0x00, 0x01}); i >= 0 {
+		if i == 0 {
+			// Skip the first start code
+			advance, token, err = splitAnnexB(data[4:], atEOF)
+			return advance + 4, token, err
+		}
+		return i, data[0:i], nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 func (s TrackerState) String() string {

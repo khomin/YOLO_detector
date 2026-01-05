@@ -47,6 +47,9 @@ fun App() {
                         }
                     }
                 }
+                Button(onClick = {
+                    viewModel.refreshSessions()
+                }) { Text("Refresh") }
             }
         }
     }
