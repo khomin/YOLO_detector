@@ -95,7 +95,7 @@ func (cc *TrackerSession) startWebRtcPipeline() error {
 			"!", "jpegparse",
 			"!", "jpegdec",
 			"!", "videoconvert",
-			"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
+			"!", "video/x-raw,format=I420",
 			"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "sliced-threads=false", "key-int-max=15",
 			"!", "video/x-h264,profile=baseline,stream-format=byte-stream",
 			"!", "h264parse", "config-interval=-1",
@@ -110,24 +110,21 @@ func (cc *TrackerSession) startWebRtcPipeline() error {
 			"!", "jpegparse",
 			"!", "jpegdec",
 			"!", "videoconvert",
-			"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
-			"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "sliced-threads=false", "key-int-max=15",
-			"!", "video/x-h264,profile=baseline,stream-format=byte-stream",
-			"!", "h264parse", "config-interval=-1",
-			"!", "video/x-h264,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
+			"!", "video/x-raw,format=I420",
+			"!", "x265enc", "speed-preset=ultrafast", "bitrate=2000", "key-int-max=15",
+			"!", "video/x-h265,profile=baseline,stream-format=byte-stream",
+			"!", "h265parse", "config-interval=-1",
+			"!", "video/x-h265,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
 			"!", "fdsink", "fd=1", "sync=false",
 		}...)
 		webrtcMimeType = webrtc.MimeTypeH265
 	default:
 		return fmt.Errorf("unsupported video codec: %s", cc.env.VIDEO_CODEC)
 	}
-
-	// 2. Setup Pipes
 	cc.gstWebRtcIn, _ = cc.gstWebRtcCmd.StdinPipe()
 	cc.gstWebRtcOut, _ = cc.gstWebRtcCmd.StdoutPipe()
-	cc.gstWebRtcCmd.Stderr = os.Stderr // Only pipe stderr to console
+	cc.gstWebRtcCmd.Stderr = os.Stderr
 
-	// 3. Create the Track
 	cc.videoTrack, _ = webrtc.NewTrackLocalStaticSample(
 		webrtc.RTPCodecCapability{
 			MimeType:    webrtcMimeType,
@@ -169,11 +166,22 @@ func (cc *TrackerSession) startWebRtcPipeline() error {
 				Duration: time.Millisecond * 33,
 			})
 		}
+		logrus.Info("scanner goroutine exited")
 	}()
 	return nil
 }
 
-func (cc *TrackerSession) stopWebRtcPipeline() error {
+func (s *TrackerSession) stopWebRtcPipeline() error {
+	if s.gstWebRtcIn != nil {
+		s.gstWebRtcIn.Close()
+	}
+	if s.gstWebRtcCmd != nil {
+		err := s.gstWebRtcCmd.Wait()
+		if err != nil {
+			logrus.Printf("gstreamer exited with error: %v", err)
+		}
+	}
+	logrus.Println("gstreamer finished")
 	return nil
 }
 

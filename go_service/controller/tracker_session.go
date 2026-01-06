@@ -120,6 +120,7 @@ func (cc *TrackerSession) closeSession() {
 	logrus.Println("Stopping GStreamer...")
 	close(cc.doneChan)
 	cc.stopEventPipeline()
+	cc.stopWebRtcPipeline()
 }
 
 func (c *TrackerTime) updateTime(events []*pb.TrackEvent) {
