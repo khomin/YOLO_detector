@@ -21,7 +21,8 @@ class Detector
 {
 public:
     Detector(std::vector<std::string> class_names,
-             std::string module_path
+             std::string module_path,
+             int camera_id
     );
 
     int run();
@@ -54,8 +55,9 @@ private:
 
     std::vector<std::string> _class_names;
     std::string _module_path;
-    int next_tracker_id = 0;
-    int frame_count_ = 0;
+    int _camera_id = 0;
+    int _next_tracker_id = 0;
+    int _frame_count = 0;
 };
 
 #endif // DETECTOR_H

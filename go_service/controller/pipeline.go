@@ -1,215 +1,196 @@
 package controller
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path"
+	"time"
 
+	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/sirupsen/logrus"
 )
 
-func (s *TrackerSession) startPipeline() error {
-	s.recordCount += 1
+func (s *TrackerSession) startEventPipeline() error {
 	fileName := fmt.Sprintf("session_%04d_%03d.mp4", s.sessionId, s.recordCount)
 	path := path.Join(s.env.RECORDINGS_TMP_DIR, fileName)
+	os.MkdirAll(s.env.RECORDINGS_TMP_DIR, os.ModePerm)
+	s.recordCount += 1
 
-	// TODO: create RECORDINGS_TMP_DIR
-
-	// x264enc
-	// args := []string{
-	// 	"fdsrc", "do-timestamp=true",
-	// 	"!", "image/jpeg",
-	// 	"!", "jpegparse",
-	// 	"!", "jpegdec",
-	// 	"!", "videoconvert",
-	// 	"!", "videorate",
-	// 	"!", "video/x-raw,framerate=30/1",
-	// 	"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
-	// 	"!", "h264parse",
-	// 	"!", "mp4mux", "fragment-duration=2000",
-	// 	"!", "filesink",
-	// 	"location=" + path, "sync=false",
-	// }
-
-	// x265enc
-	args := []string{
-		"fdsrc", "do-timestamp=true",
-		"!", "image/jpeg",
-		"!", "jpegparse",
-		"!", "jpegdec",
-		"!", "videoconvert",
-		"!", "videorate",
-		"!", "video/x-raw,framerate=30/1",
-		"!", "x265enc", "speed-preset=ultrafast", "bitrate=2000",
-		"!", "h265parse",
-		"!", "mp4mux", "fragment-duration=2000",
-		"!", "filesink",
-		"location=" + path, "sync=false",
+	switch s.env.VIDEO_CODEC {
+	case "H264":
+		s.gstCmd = exec.Command("gst-launch-1.0", []string{
+			"fdsrc", "do-timestamp=true",
+			"!", "image/jpeg",
+			"!", "jpegparse",
+			"!", "jpegdec",
+			"!", "videoconvert",
+			"!", "videorate",
+			"!", "video/x-raw,framerate=30/1",
+			"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+			"!", "h264parse",
+			"!", "mp4mux", "fragment-duration=2000",
+			"!", "filesink",
+			"location=" + path, "sync=false",
+		}...)
+	case "H265":
+		s.gstCmd = exec.Command("gst-launch-1.0", []string{
+			"fdsrc", "do-timestamp=true",
+			"!", "image/jpeg",
+			"!", "jpegparse",
+			"!", "jpegdec",
+			"!", "videoconvert",
+			"!", "videorate",
+			"!", "video/x-raw,framerate=30/1",
+			"!", "x265enc", "speed-preset=ultrafast", "bitrate=2000",
+			"!", "h265parse",
+			"!", "mp4mux", "fragment-duration=2000",
+			"!", "filesink",
+			"location=" + path, "sync=false",
+		}...)
+	default:
+		return fmt.Errorf("unsupported video codec: %s", s.env.VIDEO_CODEC)
 	}
-
-	s.gstCmd = exec.Command("gst-launch-1.0", args...)
-
-	// 1. Get STDIN pipe (for sending data to GStreamer)
+	// get STDIN pipe (for sending data to gstreamer)
 	var err error
 	s.gstIn, err = s.gstCmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
-
-	// 2. Set STDERR (for capturing crash reasons)
-	// s.gstCmd.Stderr = &stderr
 	s.gstCmd.Stderr = os.Stderr
 	s.gstCmd.Stdout = os.Stdout // Optional: keep stdout visible
 
-	// 3. Start the GStreamer pipeline process
+	// start the gstreamer pipeline process
 	if err := s.gstCmd.Start(); err != nil {
 		return fmt.Errorf("failed to start gst-launch: %w", err)
-		// return fmt.Errorf("failed to start gst-launch: %w (stderr: %s)", err, stderr.String())
 	}
-
-	// Now, launch a goroutine to wait for the GStreamer process to finish
-	// This allows us to log the crash reason immediately.
-	// go func() {
-	// 	if err := s.gstCmd.Wait(); err != nil {
-	// 		// This runs if the GStreamer process exits with a non-zero code (crashed)
-	// 		logrus.Printf("!!! GStreamer CRASHED or EXITED")
-	// 		// logrus.Printf("!!! Crash Reason (stderr): %s", stderr.String())
-	// 		logrus.Printf("!!! Exit Error: %v", err)
-	// 		// You might want to close the gRPC connection (or send a signal) here
-	// 	}
-	// }()
-
-	logrus.Printf("GStreamer pipeline started")
+	logrus.Printf("gstreamer pipeline started")
 	return nil
 }
 
-func (s *TrackerSession) stopPipeline() error {
+func (s *TrackerSession) stopEventPipeline() error {
 	if s.gstIn != nil {
 		s.gstIn.Close()
 	}
 	if s.gstCmd != nil {
 		err := s.gstCmd.Wait()
 		if err != nil {
-			logrus.Printf("GStreamer exited with error: %v", err)
+			logrus.Printf("gstreamer exited with error: %v", err)
 		}
 	}
-	logrus.Println("GStreamer finished")
+	logrus.Println("gstreamer finished")
 	return nil
 }
 
-// args := []string{
-// 	// "fdsrc",
-// 	// "!",
-// 	// "filesink", "location=/home/khomin/Desktop/capture1.jpeg", "buffer-mode=0",
+func (cc *TrackerSession) startWebRtcPipeline() error {
+	webrtcMimeType := ""
+	switch cc.env.VIDEO_CODEC {
+	case "H264":
+		cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
+			"fdsrc", "do-timestamp=true",
+			"!", "image/jpeg",
+			"!", "jpegparse",
+			"!", "jpegdec",
+			"!", "videoconvert",
+			"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
+			"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "sliced-threads=false", "key-int-max=15",
+			"!", "video/x-h264,profile=baseline,stream-format=byte-stream",
+			"!", "h264parse", "config-interval=-1",
+			"!", "video/x-h264,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
+			"!", "fdsink", "fd=1", "sync=false",
+		}...)
+		webrtcMimeType = webrtc.MimeTypeH264
+	case "H265":
+		cc.gstWebRtcCmd = exec.Command("gst-launch-1.0", []string{
+			"fdsrc", "do-timestamp=true",
+			"!", "image/jpeg",
+			"!", "jpegparse",
+			"!", "jpegdec",
+			"!", "videoconvert",
+			"!", "video/x-raw,format=I420", // Explicitly set the format Android loves
+			"!", "x264enc", "bitrate=2000", "tune=zerolatency", "speed-preset=ultrafast", "sliced-threads=false", "key-int-max=15",
+			"!", "video/x-h264,profile=baseline,stream-format=byte-stream",
+			"!", "h264parse", "config-interval=-1",
+			"!", "video/x-h264,stream-format=byte-stream,alignment=au", // 'au' means Access Unit (Full Frame)
+			"!", "fdsink", "fd=1", "sync=false",
+		}...)
+		webrtcMimeType = webrtc.MimeTypeH265
+	default:
+		return fmt.Errorf("unsupported video codec: %s", cc.env.VIDEO_CODEC)
+	}
 
-// 	// "fdsrc", // "do-timestamp=true", // Tell GStreamer to time the frames as they arrive
-// 	// "!",
-// 	// "image/jpeg", //,framerate=30/1", // Force a framerate so the video has a "speed"
-// 	// "!",
-// 	// "jpegparse", // ASSEMBLER: Ensures the encoder gets 100% of the image
-// 	// "!",
-// 	// "jpegdec",
-// 	// "!",
-// 	// "videoconvert",
-// 	// "!",
-// 	// "x264enc", // "tune=zerolatency", "speed-preset=ultrafast",
-// 	// "!",
-// 	// "h264parse",
-// 	// "!",
-// 	// "mp4mux",
-// 	// "!",
-// 	// "filesink", "location=/home/khomin/Desktop/capture1.mp4", //, "sync=false",
+	// 2. Setup Pipes
+	cc.gstWebRtcIn, _ = cc.gstWebRtcCmd.StdinPipe()
+	cc.gstWebRtcOut, _ = cc.gstWebRtcCmd.StdoutPipe()
+	cc.gstWebRtcCmd.Stderr = os.Stderr // Only pipe stderr to console
 
-// 	// "fdsrc",
-// 	// // 2. Define Input Caps (CRITICAL)
-// 	// // You must tell GStreamer this is JPEG and invent a framerate (e.g., 25 or 30 fps)
-// 	// // otherwise x264enc will refuse to start.
-// 	// "!", "image/jpeg", //,framerate=30/1",
+	// 3. Create the Track
+	cc.videoTrack, _ = webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{
+			MimeType:    webrtcMimeType,
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+		},
+		"video",
+		"pion",
+	)
+	if err := cc.gstWebRtcCmd.Start(); err != nil {
+		return err
+	}
+	// reader Loop
+	go func() {
+		scanner := bufio.NewScanner(cc.gstWebRtcOut)
+		buf := make([]byte, 0, 1024*1024)
+		scanner.Buffer(buf, 1024*1024)
+		scanner.Split(splitAnnexB)
+		var headerStack []byte // to store SPS/PPS until a real frame arrives
 
-// 	// // 3. Parse the Bytes
-// 	// "!", "jpegparse", // Finds the start/end of each JPEG frame
+		for scanner.Scan() {
+			data := scanner.Bytes()
+			if len(data) == 0 {
+				continue
+			}
+			// if it's a small packet (SPS/PPS/Metadata), save it.
+			if len(data) < 100 {
+				headerStack = append(headerStack, []byte{0x00, 0x00, 0x00, 0x01}...)
+				headerStack = append(headerStack, data...)
+				continue
+			}
+			// if it's a big packet (Video Frame), attach any saved headers and send.
+			finalPacket := append([]byte{0x00, 0x00, 0x00, 0x01}, data...)
+			if len(headerStack) > 0 {
+				finalPacket = append(headerStack, finalPacket...)
+				headerStack = nil // Clear the stack
+			}
+			cc.videoTrack.WriteSample(media.Sample{
+				Data:     finalPacket,
+				Duration: time.Millisecond * 33,
+			})
+		}
+	}()
+	return nil
+}
 
-// 	// // 4. Decode JPEG to Raw Video
-// 	// "!", "jpegdec",
+func (cc *TrackerSession) stopWebRtcPipeline() error {
+	return nil
+}
 
-// 	// // 5. Convert Color Space
-// 	// "!", "videoconvert", // Ensures compatibility with the encoder
-
-// 	// // 6. Encode to H.264
-// 	// // tune=zerolatency: Don't buffer frames; output immediately (prevents hangs)
-// 	// // speed-preset=ultrafast: Sacrifice quality for speed (crucial for ARM CPUs)
-// 	// "!", "x264enc", // "tune=zerolatency", "speed-preset=ultrafast",
-
-// 	// // 7. Parse H.264 stream (Safety for the muxer)
-// 	// "!", "h264parse",
-
-// 	// // 8. Container Muxing
-// 	// "!", "mp4mux",
-
-// 	// // 9. Write to File
-// 	// "!", "filesink", "location=/home/khomin/Desktop/capture1.mp4", //"sync=false",
-
-// 	// // #
-// 	// "fdsrc", "do-timestamp=true", // Reads from the pipe (your Go .Write calls)
-// 	// "!",
-// 	// "image/jpeg,framerate=30/1", // Tell GStreamer what the bytes are (CAPS ARE CRITICAL HERE)
-// 	// "!",
-// 	// "jpegparse", // robustly finds the start/end of JPEGs in the byte stream
-// 	// "!",
-// 	// "multipartmux", // wraps them into a playable MJPEG stream
-// 	// "!",
-// 	// "filesink", "location=/home/khomin/Desktop/capture_fixed.mjpeg", "sync=false",
-
-// 	// // # gemini pro already better
-// 	// "fdsrc", "do-timestamp=true",
-// 	// "!",
-// 	// "image/jpeg,framerate=5/1", // 1. Assume input is roughly 10 fps
-// 	// "!",
-// 	// "jpegparse",
-// 	// "!",
-// 	// "jpegdec", // 2. Decode so we can fix the timing
-// 	// "!",
-// 	// "videorate", // 3. SMOOTHING MAGIC: Fills gaps to make it steady
-// 	// "!",
-// 	// "video/x-raw,framerate=25/1", // 4. Output a standard 30fps stream (repeating frames if needed)
-// 	// "!",
-// 	// "jpegenc", // 5. Re-encode to JPEG (fast)
-// 	// "!",
-// 	// "multipartmux",
-// 	// "!",
-// 	// "filesink", "location=/home/khomin/Desktop/capture_fixed.mjpeg", "sync=false",
-
-// 	// "fdsrc", "do-timestamp=true",
-// 	// "!", "image/jpeg",
-// 	// "!", "jpegparse", // Fixes the green corruption (frame assembly)
-
-// 	// // 2. DECODE: We must decode to raw video to fix the timing
-// 	// "!", "jpegdec",
-
-// 	// // 3. THE GEARBOX: Fixes the "Time Lapse" / "Fast Forward" issue
-// 	// "!", "videorate",
-
-// 	// // 4. THE TARGET: Force the stream to become rigid 30fps
-// 	// // GStreamer will now duplicate your 7 frames into 30 frames per second
-// 	// "!", "video/x-raw,framerate=30/1",
-
-// 	// // 5. ENCODE: Now we have a perfect stream for x264
-// 	// "!", "videoconvert",
-// 	// "!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
-// 	// "!", "h264parse",
-// 	// "!", "mp4mux",
-// 	// "!", "filesink", "location=/home/khomin/Desktop/capture_fixed.mp4", "sync=false",
-
-// 	"fdsrc", "do-timestamp=true",
-// 	"!", "image/jpeg",
-// 	"!", "jpegparse",
-// 	"!", "jpegdec",
-// 	"!", "videoconvert",
-// 	"!", "videorate",
-// 	"!", "video/x-raw,framerate=30/1",
-// 	"!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
-// 	"!", "h264parse",
-// 	"!", "mp4mux", "fragment-duration=2000",
-// 	"!", "filesink", "location=/home/khomin/Desktop/capture_fixed.mp4", "sync=false",
-// }
+func splitAnnexB(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.Index(data, []byte{0x00, 0x00, 0x00, 0x01}); i >= 0 {
+		if i == 0 {
+			// Skip the first start code
+			advance, token, err = splitAnnexB(data[4:], atEOF)
+			return advance + 4, token, err
+		}
+		return i, data[0:i], nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}

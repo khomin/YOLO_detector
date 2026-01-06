@@ -30,13 +30,13 @@ int main() {
 
     Detector detector(
         load_coco_names(config.get<std::string>("CocoNames")),
-        config.get<std::string>("YOLO.model_path")
+        config.get<std::string>("YOLO.model_path"),
+        config.get<int>("camera_id")
     );
 
     detector.onFrameReady = [&](tracker::FrameUpdate& event) {
         bool success = signal_client.sendUpdate(event);
         if(!success) {
-//            signal_client.stopStreaming();
             signal_client.startStreaming();
         }
     };

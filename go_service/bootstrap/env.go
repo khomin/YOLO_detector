@@ -20,6 +20,7 @@ type Env struct {
 	SESSION_ALLOWED_CLASSES   []string      `mapstructure:"SESSION_ALLOWED_CLASSES"`
 	DB_HOST                   string        `mapstructure:"DB_HOST"`
 	DB_NAME                   string        `mapstructure:"DB_NAME"`
+	VIDEO_CODEC               string        `mapstructure:"VIDEO_CODEC"`
 	Duration                  time.Duration `mapstructure:"duration"`
 }
 

@@ -23,20 +23,22 @@ const int MAX_MISSED = 10; // remove tracker after this many skipped frames
 const uint32_t DETECTOR_NODE_ID = 42;
 
 Detector::Detector(std::vector<std::string> class_names,
-                   std::string module_path) :
+                   std::string module_path,
+                   int camera_id
+) :
     _class_names(class_names),
-    _module_path(module_path)
+    _module_path(module_path),
+    _camera_id(camera_id)
 {
 
 }
 
 int Detector::run() {
     if (_class_names.empty()) {
-        std::cerr << "ERROR: Could not load class names from coco.names!" << std::endl;
+        std::cerr << "ERROR: class names should not be empty!" << std::endl;
         return -1;
     }
-
-    // 2. Load ONNX Model
+    // load ONNX Model
     std::string module_path = "./resources/yolov5n.onnx";
     cv::dnn::Net net = cv::dnn::readNetFromONNX(module_path);
     if (net.empty()) {
@@ -48,42 +50,23 @@ int Detector::run() {
     net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
     net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 
-    // 3. Initialize Camera (0 for default webcam)
-    cv::VideoCapture cap(0);
-//    cv::VideoCapture cap(1);
+    cv::VideoCapture cap(_camera_id);
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
     if (!cap.isOpened()) {
         std::cerr << "ERROR: Could not open camera 0." << std::endl;
         return -1;
     }
-
-    // 4. Detection Loop
     cv::Mat frame;
-
     std::vector<cv::Scalar> colors;
+    std::vector<Tracker> trackers;
     colors.push_back(cv::Scalar(0, 255, 0));
     colors.push_back(cv::Scalar(0, 255, 255));
     colors.push_back(cv::Scalar(255, 255, 0));
     colors.push_back(cv::Scalar(255, 0, 0));
     colors.push_back(cv::Scalar(0, 0, 255));
 
-    std::vector<Tracker> trackers;
-
-//      auto start = std::chrono::steady_clock::now();
-
     while (cap.read(frame)) {
-//        auto key = cv::waitKey(1);
-//        if (key == 'q' || key == 27) { // 27 is the ASCII code for ESC
-//            std::cout << "User pressed 'q' or ESC. Exiting video loop." << std::endl;
-//            break;
-//        }
-
-//        auto end = std::chrono::steady_clock::now();
-//        auto elapsed_seconds = std::chrono::duration<double>(start - end).count();
-//        start = end;
-//        std::cout << "Real FPS: " << (1.0 / elapsed_seconds) << std::endl;
-
         int64 time_start = cv::getTickCount();
 
         // storage for detections this frame (only filled on inference frames)
@@ -91,7 +74,7 @@ int Detector::run() {
         std::vector<int> det_class_ids;
         std::vector<float> det_confidences;
 
-        if (frame_count_ % INFERENCE_SKIP == 0) {
+        if (_frame_count % INFERENCE_SKIP == 0) {
             std::vector<cv::Mat> outs;
 
             // --- Pre-processing (Image to Blob) ---
@@ -168,12 +151,12 @@ int Detector::run() {
             draw_trackers(frame, colors, time_start, trackers);
         }
 
-        frame_count_++; // Increment the counter
+        _frame_count++;
 
         send_result(detections, det_class_ids, det_confidences, frame);
 
         // --- Display ---
-        imshow("YOLOv5 C++ Detection (ThinkPad T14) - Kalman Smoothed", frame);
+        imshow("YOLOv5 C++ Detection Kalman Smoothed", frame);
         cv::waitKey(1);
     }
 
@@ -191,7 +174,7 @@ void Detector::send_result(std::vector<cv::Rect>& detections,
         return;
     }
     tracker::FrameUpdate frame_update;
-    frame_update.set_frame_number(frame_count_);
+    frame_update.set_frame_number(_frame_count);
 
     std::vector<uchar> buffer;
     std::vector<int> compression_params;
@@ -379,7 +362,7 @@ void Detector::process_predictions_and_update_trackers(cv::Mat& frame, cv::Mat& 
         if (matchD[d] == -1) {
             Tracker tr;
             tr.kf = create_kalman_for_rect(detections[d]);
-            tr.id = next_tracker_id++;
+            tr.id = _next_tracker_id++;
             tr.class_id = det_class_ids[d];
             tr.last_confidence = det_confidences[d];
             tr.missed_frames = 0;
@@ -424,6 +407,6 @@ void Detector::draw_trackers(cv::Mat& frame,
                     cv::Point(box.tl().x + 2, box.tl().y - 6),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,0,0));
     }
-    float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
-    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+//    float t = (cv::getTickCount() - time_start) / static_cast<float>(cv::getTickFrequency());
+//    cv::putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
 }
