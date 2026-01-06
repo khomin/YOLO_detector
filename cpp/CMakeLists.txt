@@ -12,12 +12,14 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/external/config-cxx)
 
 add_executable(${PROJECT}
     main.cpp
+    safe_queue.h
     detector.h detector.cpp
     network_client.h network_client.cpp
     ./protobuf/generated/tracker.pb.h
     ./protobuf/generated/tracker.pb.cc
     ./protobuf/generated/tracker.grpc.pb.h
     ./protobuf/generated/tracker.grpc.pb.cc
+    async_network_client.h async_network_client.cpp
 
 )
 
