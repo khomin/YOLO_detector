@@ -1,11 +1,12 @@
 #ifndef DETECTOR_H
 #define DETECTOR_H
 
-#include "protobuf/generated/tracker.pb.h"
-
 #include <string>
 #include <functional>
 #include <opencv2/video/tracking.hpp>
+#include "protobuf/generated/tracker.pb.h"
+
+#include "detection_work_item.h"
 
 struct Tracker {
     cv::KalmanFilter kf;
@@ -27,7 +28,7 @@ public:
 
     int run();
 
-    std::function<void(tracker::FrameUpdate& event)> onFrameReady;
+    std::function<void(DetectionWorkItem& item)> onFrame;
 
 private:
 

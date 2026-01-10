@@ -20,7 +20,6 @@ const int INFERENCE_SKIP = 4;
 // --- Tracking Constants ---
 const float MATCH_IoU_THRESHOLD = 0.3f;
 const int MAX_MISSED = 10; // remove tracker after this many skipped frames
-const uint32_t DETECTOR_NODE_ID = 42;
 
 Detector::Detector(std::vector<std::string> class_names,
                    std::string module_path,
@@ -173,45 +172,57 @@ void Detector::send_result(std::vector<cv::Rect>& detections,
         std::cerr << "Error: Detection result vectors have mismatched sizes." << std::endl;
         return;
     }
-    tracker::FrameUpdate frame_update;
-    frame_update.set_frame_number(_frame_count);
+    DetectionWorkItem item;
+    item.frame = frame.clone(); // Take a copy so main thread can keep drawing
+    item.frame_count = _frame_count;
+    item.detections = detections;
+    item.class_ids = det_class_ids;
+    item.confidences = det_confidences;
+    item.names = _class_names;
 
-    std::vector<uchar> buffer;
-    std::vector<int> compression_params;
-    // Optional: set JPEG quality (0-100), default is 95.
-    // Lower quality saves bandwidth.
-    compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
-    compression_params.push_back(80);
-
-    auto ok = cv::imencode(".jpeg", frame, buffer, compression_params);
-    if(ok) {
-        frame_update.set_encoded_frame(buffer.data(), buffer.size());
+    if(onFrame) {
+        onFrame(item);
     }
 
-    for (size_t i = 0; i < detections.size(); ++i) {
-        const cv::Rect& rect = detections[i];
+//    tracker::FrameUpdate frame_update;
+//    frame_update.set_frame_number(_frame_count);
 
-        // IMPORTANT: repeated fields have an 'Add()' method.
-        // This creates a new 'TrackEvent' sub-message and returns a pointer to it.
-        tracker::TrackEvent* event = frame_update.add_events();
+//    std::vector<uchar> buffer;
+//    std::vector<int> compression_params;
+//    // Optional: set JPEG quality (0-100), default is 95.
+//    // Lower quality saves bandwidth.
+//    compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
+//    compression_params.push_back(80);
 
-        // --- Populate TrackEvent fields ---
-        event->set_tracker_id(DETECTOR_NODE_ID);
-        event->set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-        event->set_class_name(_class_names[i]);
-        event->set_class_id(det_class_ids[i]);
-        event->set_confidence(det_confidences[i]);
+//    auto ok = cv::imencode(".jpeg", frame, buffer, compression_params);
+//    if(ok) {
+//        frame_update.set_encoded_frame(buffer.data(), buffer.size());
+//    }
 
-        // --- Populate the BoundingBox sub-message ---
-        tracker::BoundingBox* bbox = event->mutable_box();
-        bbox->set_x(rect.x);
-        bbox->set_y(rect.y);
-        bbox->set_width(rect.width);
-        bbox->set_height(rect.height);
-    }
-    if(onFrameReady) {
-        onFrameReady(frame_update);
-    }
+//    for (size_t i = 0; i < detections.size(); ++i) {
+//        const cv::Rect& rect = detections[i];
+
+//        // IMPORTANT: repeated fields have an 'Add()' method.
+//        // This creates a new 'TrackEvent' sub-message and returns a pointer to it.
+//        tracker::TrackEvent* event = frame_update.add_events();
+
+//        // --- Populate TrackEvent fields ---
+//        event->set_tracker_id(DETECTOR_NODE_ID);
+//        event->set_timestamp_ms(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+//        event->set_class_name(_class_names[i]);
+//        event->set_class_id(det_class_ids[i]);
+//        event->set_confidence(det_confidences[i]);
+
+//        // --- Populate the BoundingBox sub-message ---
+//        tracker::BoundingBox* bbox = event->mutable_box();
+//        bbox->set_x(rect.x);
+//        bbox->set_y(rect.y);
+//        bbox->set_width(rect.width);
+//        bbox->set_height(rect.height);
+//    }
+//    if(onFrameReady) {
+//        onFrameReady(frame_update);
+//    }
 }
 
 float Detector::iou(const cv::Rect& a, const cv::Rect& b) {

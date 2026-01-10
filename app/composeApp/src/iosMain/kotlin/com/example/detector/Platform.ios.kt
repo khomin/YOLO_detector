@@ -1,5 +1,6 @@
 package com.example.detector
 
+import com.example.detector.data.Platform
 import platform.UIKit.UIDevice
 
 class IOSPlatform: Platform {

@@ -14,11 +14,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        val initializationOptionsBuilder = WebRtc.createInitializationOptionsBuilder()
-//            .setInjectableLogger(WebRtcLogger, Logging.Severity.LS_ERROR)
-        val peerConnectionFactoryBuilder = WebRtc.createPeerConnectionFactoryBuilder(initializationOptionsBuilder = initializationOptionsBuilder)
-        WebRtc.configure(peerConnectionFactoryBuilder = peerConnectionFactoryBuilder)
-
         setContent {
             App()
         }

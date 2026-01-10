@@ -1,8 +1,5 @@
-package com.example.detector
+package com.example.detector.data
 
-import com.example.detector.data.SessionDescriptionRequest
-import com.example.detector.data.SessionDescriptionResponse
-import com.example.detector.data.SessionInfo
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -11,7 +8,8 @@ import io.ktor.client.call.*
 import io.ktor.http.*
 import kotlinx.serialization.json.Json
 
-class SignalingClient(private val baseUrl: String) {
+class SignalingClient() {
+    private var baseUrl: String ?= null
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -19,6 +17,10 @@ class SignalingClient(private val baseUrl: String) {
                 isLenient = true
             })
         }
+    }
+
+    fun init(baseUrl: String) {
+        this.baseUrl = baseUrl
     }
 
     suspend fun sendOffer(sessionId: String, offerSdp: String): String {

@@ -20,6 +20,7 @@ add_executable(${PROJECT}
     ./protobuf/generated/tracker.grpc.pb.h
     ./protobuf/generated/tracker.grpc.pb.cc
     async_network_client.h async_network_client.cpp
+    detection_work_item.h
 
 )
 

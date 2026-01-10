@@ -1,90 +1,157 @@
 package com.example.detector
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.detector.models.MainViewModel
+import com.example.detector.data.SessionRep
+import com.example.detector.data.ThemeMode
+import com.example.detector.viewModels.MainViewModel
+import com.example.detector.ui.screens.LoadScreen
+import com.example.detector.ui.screens.MainScreen
+import com.example.detector.ui.screens.SettingsScreen
+import com.example.detector.viewModels.ThemeViewModel
+import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
+
+//val viewModel = remember { MainViewModel(SignalingClient("http://192.168.1.6:8081")) }
+//val sessions by viewModel.sessions.collectAsState()
+//val remoteTrack by viewModel.remoteTrack.collectAsState()
 
 @Composable
 fun App() {
-    val viewModel = remember { MainViewModel(SignalingClient("http://192.168.1.6:8081")) }
-    val sessions by viewModel.sessions.collectAsState()
-    val remoteTrack by viewModel.remoteTrack.collectAsState()
+    val model = koinViewModel<MainViewModel>()
+    val sessionRep: SessionRep = koinInject()
+    val themeViewModel: ThemeViewModel = koinViewModel()
 
-    MaterialTheme {
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-        ) {
-            Text(if(remoteTrack == null) "Idle" else "Active")
+    val loading by model.loading.collectAsState()
+    val status by sessionRep.onStatus.collectAsState()
+    val themeMode by themeViewModel.themeMode.collectAsState()
+    val systemInDarkTheme = isSystemInDarkTheme()
 
-            if (remoteTrack != null) {
-                // Show the YOLO video
-                VideoRenderer(remoteTrack, Modifier.fillMaxWidth().height(400.dp))
-                Button(onClick = { /* stop logic */ }) { Text("Close Stream") }
-            } else {
-                // Show the list of sessions
-                LazyColumn {
-                    items(sessions) { session ->
-                        Button(onClick = { viewModel.connectToSession(session.id.toString()) }) {
-                            Text("Connect to Session: ${session.id} (${session.state})")
-                        }
-                    }
+    // Determine actual theme
+    val isDarkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> systemInDarkTheme
+    }
+
+    LaunchedEffect(Unit) {
+        model.init()
+        sessionRep.connect()
+        model.refreshSessions()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            sessionRep.disconnect()
+        }
+    }
+
+    MaterialTheme(
+        colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
+    ) {
+        if(loading) {
+            LoadScreen()
+        } else {
+            NavigatorApp()
+        }
+    }
+}
+
+@Composable
+fun NavigatorApp() {
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
+            ) {
+                NavigationBar(
+                    modifier = Modifier
+                        .height(56.dp)
+                        .fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    NavigationBarItem(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        icon = { Icon(Icons.Default.Home, null) },
+                        label = { Text("Main") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        icon = { Icon(Icons.Default.Settings, null) },
+                        label = { Text("Settings") }
+                    )
                 }
-                Button(onClick = {
-                    viewModel.refreshSessions()
-                }) { Text("Refresh") }
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (selectedTab) {
+                0 -> MainScreen()
+                1 -> SettingsScreen()
             }
         }
     }
 }
 
 //@Composable
-//@Preview
-//fun App() {
-//    val viewModel = remember { MainViewModel() }
-//    val sessions by viewModel.sessions.collectAsState()
+//fun AppNavigation() {
+//    val navController = rememberNavController()
 //
-//    MaterialTheme {
-////        var showContent by remember { mutableStateOf(false) }
-//        Column(
-//            modifier = Modifier
-//                .background(MaterialTheme.colorScheme.primaryContainer)
-//                .safeContentPadding()
-//                .fillMaxSize(),
-//            horizontalAlignment = Alignment.CenterHorizontally,
-//        ) {
-////            Button(onClick = { showContent = !showContent }) {
-////                Text("Click me! $showContent")
-////            }
-//            Button(onClick = {
-//                viewModel.refreshSessions()
-//            }) {
-//                Text("Refresh")
-//            }
-//
-//            LazyColumn(modifier = Modifier.fillMaxSize()) {
-//                items(sessions.size) { index ->
-//                    val session = sessions[index]
-//                    Text("session: id=${session.id}, state=${session.state}")
-//                }
-//            }
+//    NavHost(
+//        navController = navController,
+//        startDestination = "main"
+//    ) {
+//        composable("main") {
+//            MainScreen(navController)
+//        }
+//        composable("settings") {
+//            SettingsScreen(navController)
+//        }
+//        composable("gallery") {
+//            GalleryScreen(navController)
+//        }
+//        composable("play/{sessionId}") { backStackEntry ->
+//            val sessionId = backStackEntry.arguments?.getString("sessionId")
+//            PlayScreen(navController, sessionId)
 //        }
 //    }
 //}

@@ -1,4 +1,4 @@
-package com.example.detector
+package com.example.detector.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier

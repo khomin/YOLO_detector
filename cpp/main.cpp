@@ -32,8 +32,8 @@ int main() {
         config.get<int>("camera_id")
     );
 
-    detector.onFrameReady = [&](tracker::FrameUpdate& event) {
-        signal_client.queueUpdate(event);
+    detector.onFrame = [&](DetectionWorkItem& item) {
+        signal_client.queueUpdate(item);
     };
     detector.run();
 
